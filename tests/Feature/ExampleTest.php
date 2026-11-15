@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use gunner42\Eet\Eet;
+use Gunner42\LaravelEetModule\Eet;
 
 it('resolves the singleton', function () {
     expect(app(Eet::class))->toBeInstanceOf(Eet::class);

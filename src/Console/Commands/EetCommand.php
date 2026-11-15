@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace gunner42\Eet\Console\Commands;
+namespace Gunner42\LaravelEetModule\Console\Commands;
 
 use Illuminate\Console\Command;
 

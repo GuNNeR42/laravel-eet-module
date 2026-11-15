@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace gunner42\Eet\Facades;
+namespace Gunner42\LaravelEetModule\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @see \gunner42\Eet\Eet
+ * @see \Gunner42\LaravelEetModule\Eet
  */
 class Eet extends Facade
 {
     protected static function getFacadeAccessor(): string
     {
-        return \gunner42\Eet\Eet::class;
+        return \Gunner42\LaravelEetModule\Eet::class;
     }
 }

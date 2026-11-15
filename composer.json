@@ -32,12 +32,12 @@
     },
     "autoload": {
         "psr-4": {
-            "gunner42\\Eet\\": "src/"
+            "Gunner42\\LaravelEetModule\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "gunner42\\Eet\\Tests\\": "tests/",
+            "Gunner42\\LaravelEetModule\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/",
             "Workbench\\Database\\Factories\\": "workbench/database/factories/",
             "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
@@ -87,10 +87,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "gunner42\\Eet\\EetServiceProvider"
+                "Gunner42\\LaravelEetModule\\EetServiceProvider"
             ],
             "aliases": {
-                "Eet": "gunner42\\Eet\\Facades\\Eet"
+                "Eet": "Gunner42\\LaravelEetModule\\Facades\\Eet"
             }
         }
     },

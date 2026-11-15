@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace gunner42\Eet\Tests;
+namespace Gunner42\LaravelEetModule\Tests;
 
-use gunner42\Eet\EetServiceProvider;
+use Gunner42\LaravelEetModule\EetServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class TestCase extends Orchestra

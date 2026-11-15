@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace gunner42\Eet;
+namespace Gunner42\LaravelEetModule;
 
-use gunner42\Eet\Console\Commands\EetCommand;
+use Gunner42\LaravelEetModule\Console\Commands\EetCommand;
 use Illuminate\Support\ServiceProvider;
 
 class EetServiceProvider extends ServiceProvider

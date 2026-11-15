@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace gunner42\Eet;
+namespace Gunner42\LaravelEetModule;
 
 class Eet
 {

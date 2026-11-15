@@ -11,7 +11,7 @@ Code, Codex, Cursor, Copilot, Gemini, …). Tool-specific files such as
 ## About the Project
 
 This repository is a Laravel package, `gunner42/laravel-eet-module`
-(namespace `gunner42\Eet\`), installed into host Laravel applications via
+(namespace `Gunner42\LaravelEetModule\`), installed into host Laravel applications via
 Composer. It is not an application: there is no `app/` directory, no frontend,
 and no deployment. The package is exercised through Orchestra Testbench and the
 `workbench/` host application.
