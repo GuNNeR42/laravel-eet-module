@@ -846,3 +846,41 @@ i linie s OpenSSL legacy). Zbývá:
   (`parallel: maximumNumberOfProcesses: 1`); zpomalí analýzu všude.
 
 Odpověď: A
+
+---
+
+## Kolo 14 – náhodné selhání type coverage (2026-11-16)
+
+Po mergi PR #4 selhala na `main` jedna linie (P8.4, Laravel 13,
+prefer-lowest) v kroku Type Coverage: `pest-plugin-type-coverage` při
+paralelním zpracování (Pokio fork) poškodil vlastní cache
+`vendor/pestphp/pest-plugin-type-coverage/.temp/v3.php` (`ParseError`,
+exit 255). Opakovaný běh prošel. Stejné selhání se dříve objevilo na jiné
+linii (P8.3, Laravel 13, stable). Chyba je v cizím pluginu, ne v balíčku.
+
+**Q50 – Jak řešit náhodné pády type coverage?**
+- a) Devops upraví krok Type Coverage tak, aby nebyl náchylný na souběh
+  (spustit bez paralelizace, pokud to plugin umožňuje, a před během smazat
+  `.temp` cache pluginu). Zároveň GitHub issue, aby se úprava vrátila, až
+  plugin chybu opraví. ★
+- b) Nechat jak je; při náhodném pádu linii ručně spustit znovu.
+
+Odpověď: A
+
+**Q51 – Přejít jen na Pest 5 (a tím zrušit PHP 8.3)?** Pest 5 i
+`pest-plugin-type-coverage` 5 vyžadují **PHP ^8.4**. Na PHP 8.3 funguje jen
+Pest 4, jehož plugin type coverage (4.0.0–4.0.4) má chybu se zámkem cache
+(Q50). Pouze Pest 5 tedy znamená zvednout `"php": "^8.3"` na `"^8.4"`
+a vyřadit 8 linií PHP 8.3 z CI (podpůrná matice v AGENTS.md a `spec/05`
+R73). Pro hostitele na PHP 8.3 je to **breaking change**. PHP 8.3 má
+bezpečnostní podporu do konce roku 2027, produkce EET 2.0 startuje
+1. 1. 2027 a část hostitelů na 8.3 ještě bude.
+- a) Ponechat PHP 8.3 a Pest 4 i 5; náhodné pády řeší úprava kroku
+  Type Coverage z PR #8 (CI tam prošlo ve všech 25 liniích). Zrušení PHP 8.3
+  zvážit až po skončení jeho podpory. ★
+- b) Zrušit PHP 8.3: `php ^8.4`, Pest jen `^5.0` (+ pest-plugin-laravel
+  a type-coverage `^5.0`), matice bez PHP 8.3, úprava z PR #8 se pak může
+  vrátit. Mění člověk (`composer.json`, AGENTS.md); architekt upraví
+  `spec/05`, devops workflow; zapsat do CHANGELOG jako breaking.
+
+Odpověď: A

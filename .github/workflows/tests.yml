@@ -129,9 +129,17 @@ jobs:
       - name: Linter
         run: composer lint:check
 
+      # pest-plugin-type-coverage 4.x writes its .temp cache without a lock when
+      # forked workers contend for it, which corrupts the file (ParseError, exit
+      # 255). Start from an empty cache and let Pokio size the pool to one
+      # worker: a per-process memory budget above the runner's RAM (R76, Q50).
       - name: Type Coverage
         if: runner.os != 'Windows'
-        run: composer test:types
+        env:
+          FORK_MEM_PER_PROC: '1099511627776'
+        run: |
+          rm -rf vendor/pestphp/pest-plugin-type-coverage/.temp
+          composer test:types
 
       - name: Test Suite
         if: runner.os != 'Windows'

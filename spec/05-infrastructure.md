@@ -1,6 +1,6 @@
 # 05 – Infrastruktura: podpůrná matice, CI a vydávání
 
-> Stav: návrh · Verze: 0.4 · Vstup pro roli **devops** (`agents/devops.md`).
+> Stav: návrh · Verze: 0.5 · Vstup pro roli **devops** (`agents/devops.md`).
 > Navazuje na: `AGENTS.md` (Technical Rules), `composer.json`,
 > `spec/10-interface.md`, `spec/11-*.md`, `spec/20-*.md`. Odpovídá na N4
 > v `spec/99-open-questions.md`.
@@ -67,7 +67,11 @@ upraví tak, aby splňovaly pravidla níže, a nic dalšího nepřidává.
   paralelních procesů** (např. `vendor/bin/phpstan analyse --debug`), protože
   paralelní procesy Larastanu tam současně přepisují soubor
   `bootstrap/cache/services.php` v Testbench a analýza padá na `Access is
-  denied` (Q49 → A). Na Linuxu zůstává analýza paralelní. Matice má `fail-fast: false`, takže
+  denied` (Q49 → A). Na Linuxu zůstává analýza paralelní. Krok Type Coverage
+  běží tak, aby nebyl náchylný na souběh: před během se smaže dočasná cache
+  pluginu `pest-plugin-type-coverage` (`.temp`) a plugin běží bez
+  paralelizace, pokud to umožňuje (Q50 → A). Plugin si jinak občas poškodí
+  vlastní cache (`ParseError`, exit 255). Matice má `fail-fast: false`, takže
   vždy doběhnou všechny linie.
 - **R77** – Testy v CI **nepřistupují k síti** mimo instalaci závislostí:
   - žádné volání EET (playground ani produkce) ani CA EET;
