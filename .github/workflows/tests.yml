@@ -17,34 +17,92 @@ concurrency:
 jobs:
   tests:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: bash
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         php: [8.3, 8.4, 8.5]
         laravel: [12.*, 13.*]
         stability: [prefer-lowest, prefer-stable]
+        openssl: [default]
         include:
           - laravel: 12.*
             testbench: 10.*
           - laravel: 13.*
             testbench: 11.*
+          - os: ubuntu-latest
+            php: 8.5
+            laravel: 13.*
+            testbench: 11.*
+            stability: prefer-stable
+            openssl: legacy
 
-    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
+    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}${{ matrix.openssl == 'legacy' && ' - openssl-legacy' || '' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          extensions: dom, curl, libxml, mbstring, openssl, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
           ini-values: error_reporting=E_ALL
           tools: composer:v2
           coverage: none
+
+      - name: Enable OpenSSL legacy provider
+        if: matrix.openssl == 'legacy'
+        run: |
+          conf="${RUNNER_TEMP}/openssl-legacy.cnf"
+          cat > "$conf" <<'CNF'
+          openssl_conf = openssl_init
+
+          [openssl_init]
+          providers = provider_sect
+
+          [provider_sect]
+          default = default_sect
+          legacy = legacy_sect
+
+          [default_sect]
+          activate = 1
+
+          [legacy_sect]
+          activate = 1
+          CNF
+          echo "OPENSSL_CONF=${conf}" >> "$GITHUB_ENV"
+
+      - name: Verify OpenSSL legacy provider state
+        if: runner.os == 'Linux'
+        env:
+          EXPECTED: ${{ matrix.openssl == 'legacy' && 'true' || 'false' }}
+        run: |
+          probe_dir="$(mktemp -d "${RUNNER_TEMP}/openssl-probe.XXXXXX")"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=probe \
+            -keyout "${probe_dir}/key.pem" -out "${probe_dir}/cert.pem"
+          openssl pkcs12 -export -legacy -passout pass:probe \
+            -inkey "${probe_dir}/key.pem" -in "${probe_dir}/cert.pem" -out "${probe_dir}/probe.p12"
+          echo "OPENSSL_CONF=${OPENSSL_CONF:-<unset>}"
+          php -r 'echo OPENSSL_VERSION_TEXT, PHP_EOL;'
+          cat > "${probe_dir}/probe.php" <<'PHP'
+          <?php
+          $certs = [];
+          echo openssl_pkcs12_read((string) file_get_contents($argv[1]), $certs, 'probe') ? 'true' : 'false';
+          PHP
+          actual="$(php "${probe_dir}/probe.php" "${probe_dir}/probe.p12")"
+          echo "openssl_pkcs12_read on a legacy PKCS#12: ${actual} (expected ${EXPECTED})"
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "::error::Legacy PKCS#12 support is '${actual}', expected '${EXPECTED}' for this lane (R79)."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |
@@ -52,8 +110,21 @@ jobs:
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress --no-scripts
           composer run prepare
 
+      - name: Installed versions
+        run: |
+          for package in laravel/framework guzzlehttp/guzzle orchestra/testbench pestphp/pest; do
+            composer show "$package" | grep -E '^(name|versions) '
+          done
+
       - name: PHPStan
+        if: runner.os != 'Windows'
         run: composer analyse
+
+      # --debug disables PHPStan's parallel workers; on Windows they rewrite
+      # Testbench's bootstrap/cache/services.php concurrently (R76, Q49).
+      - name: PHPStan (Windows)
+        if: runner.os == 'Windows'
+        run: vendor/bin/phpstan analyse --debug
 
       - name: Linter
         run: composer lint:check

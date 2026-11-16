@@ -15,3 +15,8 @@
 /CLAUDE.md          export-ignore
 /AGENTS.md          export-ignore
 /AGENTS_PACKAGE.md  export-ignore
+/spec               export-ignore
+/agents             export-ignore
+*.p12               binary
+*.pfx               binary
+*.der               binary

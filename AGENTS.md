@@ -16,7 +16,19 @@ Composer. It is not an application: there is no `app/` directory, no frontend,
 and no deployment. The package is exercised through Orchestra Testbench and the
 `workbench/` host application.
 
-[modul pro evidenci tržeb podle zákona o elektronické evidenci tržeb. doplnit celý popis]
+The package implements the client side of the Czech electronic registration
+of sales, **EET 2.0** (Act No. 180/2026 Coll., interface version 4.x,
+namespace `http://fs.gov.cz/eet/schema/v4`), for point-of-sale and invoicing
+systems built on Laravel. It manages taxpayers, their registration units,
+cash registers and cash register certificates. It builds the data message of
+a registered sale, signs it (WS-Security, RSA-SHA256), sends it to the tax
+authority's SOAP service, verifies and stores the confirmation code (POK) or
+the error, and resubmits unconfirmed sales until they are confirmed. EET 1
+(interface v3: PKP, BKP, FIK, VAT breakdown) is not supported.
+
+The binding facts taken from the Ministry of Finance documentation are
+summarized in `spec/01-eet-2-0-fakta.md`; the source documents are in
+`spec/zadani/mfcr/`.
 
 ## Agent Roles
 
@@ -93,8 +105,8 @@ approved.
   console commands or Blade views. State changes go only through Actions (one
   public `handle()`); Services are stateless computations. Controllers and
   commands validate, authorize, delegate, and render/output.
-- Money, quantities and VAT rates are value objects defined in the
-  specification; `float` is forbidden in `src/`.
+- Money and quantities are value objects defined in the
+  specification; `float` is forbidden in `src/` for money and quantities.
 - Never read the clock directly (`time()`, `new DateTime()`, `date()`). Use
   `now()` / `CarbonImmutable` so tests can freeze time with
   `$this->travelTo()`.

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Gunner42\LaravelEetModule;
 
-use Gunner42\LaravelEetModule\Console\Commands\EetCommand;
+use Gunner42\LaravelEetModule\Console\Commands\ImportCertificateCommand;
+use Gunner42\LaravelEetModule\Console\Commands\PruneCommand;
+use Gunner42\LaravelEetModule\Console\Commands\ResubmitCommand;
+use Gunner42\LaravelEetModule\Console\Commands\StatusCommand;
+use Gunner42\LaravelEetModule\Console\Commands\VerifyCommand;
 use Illuminate\Support\ServiceProvider;
 
 class EetServiceProvider extends ServiceProvider
@@ -24,10 +28,6 @@ class EetServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__.'/../routes/laravel-eet-module.php');
-
-        $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-eet-module');
-
         $this->loadTranslationsFrom(__DIR__.'/../lang', 'laravel-eet-module');
 
         if (! $this->app->runningInConsole()) {
@@ -38,24 +38,20 @@ class EetServiceProvider extends ServiceProvider
             __DIR__.'/../config/laravel-eet-module.php' => config_path('laravel-eet-module.php'),
         ], ['laravel-eet-module', 'laravel-eet-module-config']);
 
-        $this->publishes([
-            __DIR__.'/../resources/views' => resource_path('views/vendor/laravel-eet-module'),
-        ], ['laravel-eet-module', 'laravel-eet-module-views']);
+        $this->publishesMigrations([
+            __DIR__.'/../database/migrations' => database_path('migrations'),
+        ], ['laravel-eet-module', 'laravel-eet-module-migrations']);
 
         $this->publishes([
             __DIR__.'/../lang' => $this->app->langPath('vendor/laravel-eet-module'),
         ], ['laravel-eet-module', 'laravel-eet-module-lang']);
 
-        $this->publishes([
-            __DIR__.'/../public' => public_path('vendor/laravel-eet-module'),
-        ], ['laravel-eet-module', 'laravel-eet-module-assets']);
-
-        $this->publishesMigrations([
-            __DIR__.'/../database/migrations' => database_path('migrations'),
-        ], ['laravel-eet-module', 'laravel-eet-module-migrations']);
-
         $this->commands([
-            EetCommand::class,
+            ImportCertificateCommand::class,
+            VerifyCommand::class,
+            ResubmitCommand::class,
+            StatusCommand::class,
+            PruneCommand::class,
         ]);
     }
 }

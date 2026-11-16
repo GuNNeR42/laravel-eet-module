@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+X-Backside-Transport: OK OK
+Connection: Keep-Alive
+User-Agent: curl/8.7.1
+Content-Type: text/xml; charset=UTF-8
+X-Global-Transaction-ID: bc626a986af9dc99035fe7d0
+Date: Sun, 15 Nov 2026 16:23:53 GMT
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: X-Global-Transaction-Id
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Transfer-Encoding: chunked
+
