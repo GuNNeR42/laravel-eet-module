@@ -67,6 +67,21 @@ final class ConfigurationValidator
     }
 
     /**
+     * renewCertificate() and eet:certificate:renew (R91, R100, R104).
+     */
+    public function forRenewal(): void
+    {
+        $this->renewalAllowedHosts();
+        $this->renewalEndpoint();
+        $this->renewalDaysBeforeExpiry();
+        $this->integerAtLeast('renewal.max_wait_seconds', 0);
+        $this->integerAtLeast('renewal.timeout_ms', 1000);
+        $this->integerAtLeast('response_max_bytes', 1024);
+        $this->proxy();
+        $this->lockStore();
+    }
+
+    /**
      * eet:prune.
      */
     public function forPrune(): void
@@ -87,6 +102,7 @@ final class ConfigurationValidator
         $this->integerAtLeast('response_timeout_ms', 2000);
         $this->responseSigner();
         $this->trustStore();
+        $this->renewalDaysBeforeExpiry();
     }
 
     /**
@@ -227,6 +243,42 @@ final class ConfigurationValidator
         $labels = explode('.', $host);
 
         return preg_match('/[a-z]/', (string) end($labels)) === 1;
+    }
+
+    private function renewalAllowedHosts(): void
+    {
+        $hosts = $this->value('renewal.allowed_hosts');
+
+        if (! is_array($hosts) || $hosts === [] || ! array_is_list($hosts)) {
+            throw new InvalidConfiguration('renewal.allowed_hosts');
+        }
+
+        foreach ($hosts as $host) {
+            if (! is_string($host) || ! self::isDnsName(self::normalizeHost($host))) {
+                throw new InvalidConfiguration('renewal.allowed_hosts');
+            }
+        }
+    }
+
+    private function renewalEndpoint(): void
+    {
+        $endpoint = $this->value('renewal.endpoint');
+        /** @var list<string> $hosts */
+        $hosts = $this->value('renewal.allowed_hosts');
+        $hosts = array_map(static fn (string $host): string => self::normalizeHost($host), $hosts);
+
+        if (! is_string($endpoint) || ! self::isAllowedEndpoint($endpoint, $hosts)) {
+            throw new InvalidConfiguration('renewal.endpoint');
+        }
+    }
+
+    private function renewalDaysBeforeExpiry(): void
+    {
+        $days = $this->value('renewal.days_before_expiry');
+
+        if (! is_int($days) || $days < 1 || $days > 365) {
+            throw new InvalidConfiguration('renewal.days_before_expiry');
+        }
     }
 
     private function proxy(): void

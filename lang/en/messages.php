@@ -78,4 +78,27 @@ return [
         'Production' => 'Production',
     ],
 
+    'renewal_statuses' => [
+        'Requesting' => 'Requesting a certificate',
+        'InProcess' => 'Waiting for the certificate',
+        'Downloading' => 'Downloading the certificate',
+        'Acknowledging' => 'Acknowledging the download',
+        'Completed' => 'Completed',
+        'Failed' => 'Failed',
+    ],
+
+    'renewal_problems' => [
+        'NotProductionCertificate' => 'Only production certificates are renewed',
+        'CertificateNotValid' => 'The certificate is not valid',
+        'CertificateUnusable' => 'The private key of the certificate cannot be decrypted',
+        'AlreadyRenewed' => 'The certificate has already been renewed',
+        'TemporaryError' => 'Temporary error of the CA EET API; the next run tries again',
+        'UnknownPendingRequest' => 'An unknown certificate request is pending at CA EET; finish it in DIS+ or wait until it ends',
+        'Rejected' => 'CA EET rejected the request',
+        'AlreadyFinished' => 'CA EET already finished the request',
+        'RequestFailed' => 'CA EET refused the call',
+        'CertificateUnreadable' => 'The downloaded certificate cannot be read',
+        'CertificateMismatch' => 'The downloaded certificate does not match the renewed certificate',
+    ],
+
 ];

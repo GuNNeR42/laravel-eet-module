@@ -6,6 +6,7 @@ namespace Gunner42\LaravelEetModule;
 
 use Gunner42\LaravelEetModule\Console\Commands\ImportCertificateCommand;
 use Gunner42\LaravelEetModule\Console\Commands\PruneCommand;
+use Gunner42\LaravelEetModule\Console\Commands\RenewCertificateCommand;
 use Gunner42\LaravelEetModule\Console\Commands\ResubmitCommand;
 use Gunner42\LaravelEetModule\Console\Commands\StatusCommand;
 use Gunner42\LaravelEetModule\Console\Commands\VerifyCommand;
@@ -48,6 +49,7 @@ class EetServiceProvider extends ServiceProvider
 
         $this->commands([
             ImportCertificateCommand::class,
+            RenewCertificateCommand::class,
             VerifyCommand::class,
             ResubmitCommand::class,
             StatusCommand::class,

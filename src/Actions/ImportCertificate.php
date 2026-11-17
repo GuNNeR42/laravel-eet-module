@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Gunner42\LaravelEetModule\Actions;
 
-use Carbon\CarbonImmutable;
 use Gunner42\LaravelEetModule\Data\ParsedCertificate;
 use Gunner42\LaravelEetModule\Models\CashRegisterCertificate;
 use Gunner42\LaravelEetModule\Models\Taxpayer;
 use Gunner42\LaravelEetModule\Services\CertificateReader;
+use Gunner42\LaravelEetModule\Services\QueryErrors;
 use Gunner42\LaravelEetModule\Services\X509;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use SensitiveParameter;
 
@@ -46,23 +47,14 @@ final class ImportCertificate
             return $existing;
         }
 
-        $certificate = new CashRegisterCertificate;
-        $certificate->forceFill([
-            'taxpayer_id' => $taxpayer->id,
-            'serial_number' => $parsed->serialNumber,
-            'subject_eic' => $parsed->commonName,
-            'valid_from' => CarbonImmutable::createFromTimestamp($parsed->validFrom)->setTimezone(date_default_timezone_get()),
-            'valid_to' => CarbonImmutable::createFromTimestamp($parsed->validTo)->setTimezone(date_default_timezone_get()),
-            'fingerprint_sha256' => $parsed->fingerprint,
-            'certificate' => $parsed->certificatePem,
-            'chain' => $parsed->chainPem,
-        ]);
-        $certificate->setEncryptedPrivateKey($parsed->privateKey);
+        $certificate = CashRegisterCertificate::fromParsed($taxpayer, $parsed);
 
         try {
             $certificate->save();
         } catch (UniqueConstraintViolationException $exception) {
-            return $this->existing($taxpayer, $parsed->fingerprint) ?? throw $exception;
+            return $this->existing($taxpayer, $parsed->fingerprint) ?? throw QueryErrors::withoutBindings($exception);
+        } catch (QueryException $exception) {
+            throw QueryErrors::withoutBindings($exception);
         }
 
         return $certificate;

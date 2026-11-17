@@ -126,6 +126,8 @@ Minimální `dat_trzby`: playground v4 **1. 7. 2026 00:00**. V produkci **1. 1. 
 | Stavy žádosti: `INPROCESS`, `ISSUED`, `DELIVERING`, `FINISHED`, `REJECTED` (s `rejectedReason`). `GET /request/not-finished` vrátí neukončené žádosti. | CA (yml) |
 | Obnova musí proběhnout **před** koncem platnosti certifikátu; doporučeno 2–3 týdny předem. Nevyzvednutý PKCS#12 se po 30 dnech smaže. Heslo a PKCS#12 se nesmí ukládat do cache ani logů. | CA |
 | Chyby: 400, 401, 404, 409 (špatný stav), 429 (rate limit), 500, vždy s `ErrorDTO {code, message, additionalInfo}`. | CA (yml) |
+| `POST /request/renew` vrací `201 {reqId}`. `claim-download` jde jen ve stavu `ISSUED`/`DELIVERING` a vrací `Pkcs12DTO {pkcs12 (base64), password ^[A-Za-z0-9]{8}$, certificate {sn (desítkově), validFrom, validTo, state, …}}`; po prvním stažení je žádost `DELIVERING` a stáhnout jde znovu až do `ack-download` (jen v `DELIVERING`, vrací `204`). `INPROCESS` nese `pollAfterSeconds ≥ 1` a `Retry-After`. `not-finished` vrací `{count, data: [reqId]}` pro EIČ obnovovaného certifikátu. | CA (yml) |
+| **Nesoulad zdrojů:** OpenAPI uvádí „minimální podporovaný payload je {}“, Postupy CA vyžadují `iat` a `exp`. Balíček posílá `iat` i `exp` (Q63). Ve kterém formátu (legacy / nový PKCS#12) API vrací certifikát, zdroje neuvádějí (Q58). | CA, yml |
 
 ## 7. Povinnosti poplatníka, které ovlivňují pokladní software
 

@@ -57,6 +57,14 @@
 | Mezní doba odezvy | `responseTimeout` | – | timeout (bez upřesnění) |
 | Pokladní certifikát | `CashRegisterCertificate` | `BinarySecurityToken` | key, cert (zkratky) |
 | Obnova pokladního certifikátu | `CertificateRenewal` | – | refresh |
+| Žádost o následný certifikát (CA EET) | `requestId` | `reqId` | ticket, order |
+| Nástupce certifikátu (z obnovy) | `successor` | – | replacement, next |
+| Předchůdce certifikátu | `predecessor` | – | parent |
+| Okno obnovy | `isInRenewalWindow()`, `renewal.days_before_expiry` | – | grace period |
+| Produkční certifikát (politika `…10.1.…`) | `hasProductionPolicy()` | – | live certificate |
+| Stav obnovy | `RenewalStatus` (enum) | `state` (CA) | – |
+| Důvod neúspěšné obnovy | `RenewalProblem` (enum) | – | – |
+| Potvrzení převzetí PKCS#12 | – (`ack-download`, `acknowledged_at`) | – | confirm |
 | Společné technické zařízení správce daně | `EetService` | – | server, API, gateway |
 | ID globální transakce | `globalTransactionId` | HTTP `X-Global-Transaction-Id` | trace id |
 
@@ -69,3 +77,5 @@
 `WarningCode`: `EicMismatchesCertificate` (1), `InvalidDelegatingEicFormat` (2),
 `SaleInFuture` (4), `SaleTooOld` (5), `InvalidRegistrationUnitFormat` (6),
 `DelegatingEicEqualsTaxpayerEic` (7).
+
+`RenewalStatus`, `RenewalProblem`: viz `spec/10-interface.md` kap. 4.

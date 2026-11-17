@@ -45,7 +45,21 @@ Eet::importCertificate($taxpayer, $contents, $password); // PKCS#12 or PEM
 - `Eet::changeEnvironment($taxpayer, Environment::Production)` affects only new sales
 - after the first production confirmation set `response_signer.production.common_name` from the stored `signer_subject` (`eet:status` shows it)
 
-### 3. Register sales
+### 3. Renew certificates (production only)
+
+```php
+$renewal = Eet::renewCertificate($certificate); // CertificateRenewal|null (null = renewed elsewhere right now)
+```
+
+- schedule `Schedule::command('eet:certificate:renew')->daily();` — renews production certificates within `renewal.days_before_expiry` (default 21) days of expiry and continues unfinished renewals; `--certificate=ID` renews manually (also after `Failed`), `--dry-run` only lists (and reports certificates that cannot be renewed)
+- the result is the renewal state (`RenewalStatus`) and `problem` (`RenewalProblem`), not an exception; `CertificateNotRenewable` only when a new renewal cannot start (playground, invalid, unusable key, already renewed)
+- on success the successor (same CN, issuer DN and AKI, production policy, signature verified by the issuer from the stored chain) is stored for the same taxpayer and pinned cash registers switch to it; listen to `CertificateRenewed` / `CertificateRenewalFailed` (queueable, `SerializesModels`)
+- CA EET API calls dispatch no HTTP client events; test them with `Http::fake()`
+- config: `renewal.endpoint`, `renewal.allowed_hosts`, `renewal.days_before_expiry`, `renewal.max_wait_seconds`, `renewal.timeout_ms`
+- import production certificates with their chain (DIS+ PKCS#12 has it; PEM: append the issuing CA); without the issuer in the stored chain the renewal fails with `CertificateMismatch`
+- a legacy PKCS#12 from CA EET needs `Eet::supportsLegacyPkcs12()`; otherwise the renewal fails with `CertificateUnreadable` / `unsupported_legacy_format`
+
+### 4. Register sales
 
 ```php
 use Gunner42\LaravelEetModule\Data\SaleData;
@@ -61,13 +75,13 @@ $pok = $sale->hasValidConfirmationCode() ? $sale->confirmation_code : null;
 - reversal: `Eet::reverse($sale, new ReversalData($cashRegister, 'S-1', now(), Amount::fromString('100.00')))`
 - reopen a rejected sale: `Eet::resubmit($sale)` (codes 2, 3, 6, 7 need `force: true`)
 
-### 4. React and monitor
+### 5. React and monitor
 
 - listen to `SaleConfirmed`, `SaleRejected`, `SaleUnconfirmed`, `SaleOverdue`, `SaleReopened`, `SaleVerified`, `SalePreflightWarned` (`Gunner42\LaravelEetModule\Events`)
-- schedule `eet:resubmit` and `eet:status` (exit code 1 = attention needed); optionally `eet:prune --days=N`
+- schedule `eet:resubmit`, `eet:status` (exit code 1 = attention needed, incl. certificates in the renewal window without a successor and failed renewals) and `eet:certificate:renew` daily; optionally `eet:prune --days=N`
 - check the connection with `Eet::verifyConnection($cashRegister)` or `php artisan eet:verify EIC UNIT CASH-REGISTER`
 
-### 5. Test the application
+### 6. Test the application
 
 ```php
 use Gunner42\LaravelEetModule\Testing\FakeResponse;
@@ -78,6 +92,7 @@ Eet::assertSentCount(1);
 ```
 
 - `FakeResponse::confirmed()`, `::error(int|ErrorCode)`, `::timeout()`, `::transportError()`, `::raw($xml)`
+- certificate renewal calls the CA EET API through the Laravel HTTP client: fake it with `Http::fake()` and `Sleep::fake()`
 - factories: `Sale::factory()->confirmed()`, `->unconfirmed()`, `->rejected()`, `->ambiguousRejected()`, `->playground()`, `->overdue()`
 
 ## Rules, References, and Templates
@@ -95,7 +110,8 @@ Read before executing:
 ## Anti-patterns
 
 - never pass floats for amounts; use `Amount::fromString()` or `Amount::fromHalere()`
-- do not call `register()` inside `DB::transaction()`
+- do not call `register()` or `renewCertificate()` inside `DB::transaction()`
+- do not try to renew playground certificates or store the downloaded PKCS#12 yourself
 - do not treat a POK of a test sale (`is_test`) as valid; use `hasValidConfirmationCode()`
 - do not automate `--force` reopening in a loop
 - do not print EET error texts without escaping them

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Gunner42\LaravelEetModule\Models\CashRegister createCashRegister(\Gunner42\LaravelEetModule\Models\RegistrationUnit $unit, string $identifier, ?string $name = null, ?\Gunner42\LaravelEetModule\Models\CashRegisterCertificate $certificate = null)
  * @method static \Gunner42\LaravelEetModule\Models\CashRegisterCertificate importCertificate(\Gunner42\LaravelEetModule\Models\Taxpayer $taxpayer, string $contents, ?string $password = null)
  * @method static bool supportsLegacyPkcs12()
+ * @method static \Gunner42\LaravelEetModule\Models\CertificateRenewal|null renewCertificate(\Gunner42\LaravelEetModule\Models\CashRegisterCertificate $certificate)
  * @method static \Gunner42\LaravelEetModule\Models\Sale register(\Gunner42\LaravelEetModule\Models\CashRegister $cashRegister, \Gunner42\LaravelEetModule\Data\SaleData $data)
  * @method static \Gunner42\LaravelEetModule\Models\Sale reverse(\Gunner42\LaravelEetModule\Models\Sale $original, \Gunner42\LaravelEetModule\Data\ReversalData $data)
  * @method static \Gunner42\LaravelEetModule\Models\Sale resubmit(\Gunner42\LaravelEetModule\Models\Sale $sale, bool $force = false)

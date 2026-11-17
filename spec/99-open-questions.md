@@ -884,3 +884,395 @@ bezpečnostní podporu do konce roku 2027, produkce EET 2.0 startuje
   `spec/05`, devops workflow; zapsat do CHANGELOG jako breaking.
 
 Odpověď: A
+
+---
+
+## Kolo 15 – obnova pokladního certifikátu přes CA EET API (issue #2, 2026-11-16)
+
+Fakta: `spec/01-eet-2-0-fakta.md` kap. 5 a 6, `caeetapi_jwt.yml`. Navazuje
+na import a výběr certifikátu ve `spec/11-poplatnik-a-certifikat.md`
+(R9–R16, R69, R70). Dokud nejsou odpovědi, architekt nepíše
+`spec/12-obnova-certifikatu.md` ani změny v `spec/10-interface.md`.
+
+**Q52 – Které prostředí CA EET API a které certifikáty?** Balíček má dvě
+prostředí (playground, produkce), CA EET API tři (test `ca.test.caeet.gov.cz`,
+zkušební `ca.zkus.caeet.gov.cz`, produkce `ca.caeet.gov.cz`). Zdroje neříkají,
+které API obnovuje playground certifikáty, a prostředí certifikátu balíček
+spolehlivě pozná jen podle politiky `…10.1.…` = produkce (R60).
+- a) Obnovují se jen produkční certifikáty (politika
+  `1.2.203.19122063.10.1.…`) přes produkční API. Playground certifikáty
+  (včetně sdílených testovacích ze zipu) se nikdy neobnovují. URL API je
+  v configu (`renewal.endpoint`, výchozí produkce) s allowlistem hostitelů
+  podle vzoru R66 (výchozí všechny tři hostitele CA EET), proxy se sdílí
+  s `proxy`. ★
+- b) Podle prostředí poplatníka (R59): produkce → produkční API,
+  playground → zkušební API.
+- c) Obojí jen podle configu; balíček prostředí certifikátu neřeší.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q53 – Jak se obnova spouští?** Balíček zatím sám nic neplánuje (10-interface
+kap. 9).
+- a) Nový příkaz `eet:certificate:renew {--taxpayer=*} {--certificate=*}
+  {--dry-run}`, který hostitel naplánuje (README doporučí denně). Projde
+  certifikáty v okně obnovy (Q54) a obnoví je. K tomu facade metoda
+  `Eet::renewCertificate($certificate)` pro ruční obnovu jednoho
+  certifikátu (i mimo okno). ★
+- b) Jako a), ale balíček příkaz sám zaregistruje do scheduleru.
+- c) Jen facade metoda; procházení a plánování řeší hostitel.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q54 – Kdy je certifikát v okně obnovy?** CA doporučuje 2–3 týdny před koncem
+platnosti; obnovovaný certifikát musí být při volání platný.
+- a) Config `renewal.days_before_expiry`, výchozí `21`, platné hodnoty
+  int 1–365. V okně je certifikát, pro který `validTo − now() ≤ N dní`. ★
+- b) Výchozí `14`.
+- c) Pevně 21 dní bez configu.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q55 – Které certifikáty poplatníka se obnovují?** Poplatník může mít víc
+platných certifikátů (R16), některé připnuté, některé s CN ≠ EIČ (R14).
+- a) Každý platný a použitelný (R69) certifikát v okně obnovy, který ještě
+  nemá nástupce. Nástupce = certifikát uložený obnovou z něj (balíček si
+  vazbu předchůdce → nástupce pamatuje). Certifikát importovaný ručně se za
+  nástupce nepovažuje. ★
+- b) Jen certifikáty, které by se podle R16 právě použily k podpisu
+  (připnuté + vybraný certifikát poplatníka).
+- c) Jen certifikáty, které hostitel výslovně označí pro automatickou obnovu
+  (opt-in, nový sloupec / metoda).
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q56 – Uložení stavu žádosti a souběh.** Mezi `renew`, vydáním,
+`claim-download` a `ack-download` může proces spadnout. Nevyzvednutý
+PKCS#12 se po 30 dnech smaže.
+- a) Nová tabulka `eet_certificate_renewals` (certifikát, `reqId`, stav,
+  důvod chyby, časy). Další běh pokračuje v rozdělané žádosti. Před novou
+  žádostí se balíček zeptá `GET /request/not-finished`, aby nevznikla
+  duplicitní žádost. Souběh dvou běhů brání cache zámek na certifikát
+  (`lock_store`, R43). ★
+- b) Bez tabulky; stav se vždy zjistí z `GET /request/not-finished`.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q57 – Čekání na vydání (`INPROCESS`).**
+- a) Příkaz / facade metoda čeká synchronně podle `pollAfterSeconds`
+  (`Retry-After`) až do `renewal.max_wait_seconds` (výchozí `120`). Když
+  certifikát do té doby není vydaný, žádost zůstane rozdělaná a dokončí ji
+  další běh. ★
+- b) Přes frontu: job se znovu zařadí se zpožděním `pollAfterSeconds`.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q58 – Stažený PKCS#12 nejde načíst (legacy formát) nebo neprojde
+kontrolou.** Zdroje neříkají, zda API vrací PKCS#12 ve stejném legacy
+formátu jako DIS+. Bez legacy provideru by import skončil
+`UnsupportedLegacyFormat` (R9, R70). PKCS#12 ani heslo se nesmí ukládat do
+cache ani logů.
+- a) `ack-download` se pošle **až po** úspěšném uložení nového certifikátu
+  (commit). Když import selže, ack se nepošle, žádost zůstane `DELIVERING`
+  (stáhnout jde znovu až do 30 dnů od vydání), nic se neuloží, vyvolá se
+  event selhání a `eet:status` to hlásí. Stažený PKCS#12 se nikam
+  neukládá. ★
+- b) Jako a), ale balíček před `POST /request/renew` odmítne obnovu, když
+  `supportsLegacyPkcs12()` vrací `false`.
+- c) Stažený PKCS#12 uložit zašifrovaný encrypterem a import zopakovat
+  později (v rozporu s doporučením CA neukládat).
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q59 – Kontrola nového certifikátu.** Co musí nový certifikát splnit, aby se
+uložil (jinak postup podle Q58 a)?
+- a) Stejné CN jako obnovovaný certifikát, klíč patří k certifikátu (R10),
+  `validTo` je pozdější než u obnovovaného a sériové číslo i platnost
+  odpovídají metadatům `certificate` z odpovědi. ★
+- b) Jen běžná kontrola importu (R10); CN se nekontroluje.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q60 – Připnutí a starý certifikát po obnově.** Připnutý certifikát má
+v R16 přednost, takže bez zásahu by se nový certifikát u pokladního zařízení
+použil až po vypršení starého.
+- a) Ve stejné transakci, ve které se uloží nový certifikát, se připnutí
+  všech pokladních zařízení přepne ze starého na nový. Starý certifikát
+  zůstane uložený (nic se nemaže); R16 bez připnutí stejně vybere nový
+  (pozdější `validTo`). ★
+- b) Připnutí se nemění; hostitel ho může přepnout sám po eventu.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q61 – Chyby API a opakování.**
+- a) Dočasné chyby (síť, timeout, 429, 500) → žádost / pokus zůstane
+  a zkusí se při dalším běhu, dokud certifikát platí. Konečné chyby
+  (`REJECTED`, 400, 401, 404, 409 mimo očekávaný stav) → event selhání
+  s důvodem a automatika pro tento certifikát se zastaví. Znovu jen ručně
+  (`eet:certificate:renew --certificate=ID` nebo facade metoda). ★
+- b) Konečné chyby také zkoušet znovu při každém běhu.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q62 – Eventy a hlášení.**
+- a) Eventy `CertificateRenewed` (starý + nový certifikát)
+  a `CertificateRenewalFailed` (certifikát + důvod jako enum
+  `RenewalProblem`), vyvolané po commitu. `eet:status` navíc skončí kódem 1,
+  když některý certifikát vyprší do `renewal.days_before_expiry` dní a nemá
+  nástupce, nebo jeho obnova skončila konečnou chybou. ★
+- b) Jen eventy, `eet:status` se nemění.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q63 – Parametry JWT.** Zdroje: RS256, `x5t#S256`, `iat` a `exp`,
+`exp − iat ≤ 5 min`; OpenAPI připouští i prázdný payload, Postupy CA
+vyžadují `iat`/`exp`.
+- a) Nový token pro každé volání API, hlavička `{"alg":"RS256","typ":"JWT",
+  "x5t#S256":…}`, payload jen `{"iat": now, "exp": now + 60}`. Bez nové
+  Composer závislosti (podpis přes `ext-openssl`). ★
+- b) `exp = now + 300` (maximum), jinak jako a).
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+**Q64 – Ověřování bez GitHub Actions.** Člověk 2026-11-16 vypnul Actions
+kvůli spotřebě. DoD (AGENTS.md bod 1) a `spec/05` počítají s 25 liniemi CI;
+lokálně jde ověřit jen jedna verze PHP na macOS.
+- a) Během práce ověřovat lokálně (`composer test`, navíc
+  `composer update --prefer-lowest` v dočasné kopii). Před mergem PR člověk
+  Actions jednorázově zapne pro jeden běh celé matice. ★
+- b) Ověřovat jen lokálně a mergovat bez CI; Windows a další verze se
+  neověří.
+
+Odpověď: A (dle doporučení, 2026-11-16)
+
+---
+
+## Kolo 16 – doplňující otázky k obnově certifikátu (2026-11-16)
+
+Vyplynuly při psaní `spec/12-obnova-certifikatu.md`. Spec je napsaná podle
+★; tester začne až po odpovědích.
+
+**Q65 – Neznámá neukončená žádost v CA.** `GET /request/not-finished`
+vrací všechny neukončené žádosti pro EIČ, i ty, které balíček nezná: podal
+je jiný systém poplatníka, člověk v DIS+, nebo balíček sám, když spadl mezi
+`POST /request/renew` a uložením `reqId`. Ze stavu žádosti nejde poznat, ke
+kterému certifikátu patří.
+- a) Novou žádost nepodat, obnova zůstane `Requesting` s dočasným
+  problémem `UnknownPendingRequest` (s `reqId`), `eet:status` skončí kódem 1.
+  Vyřeší člověk (dokončí žádost v DIS+, nebo počká na její ukončení). Cizí
+  žádost se nikdy nepřevezme, aby ji balíček nesebral jinému systému. ★
+- b) Neznámou žádost převzít, když je právě jedna a lokální obnova je
+  `Requesting` po dočasném problému (pravděpodobně vlastní po pádu).
+- c) Neznámé žádosti ignorovat a podat novou (riziko dvou certifikátů).
+
+Odpověď: A
+
+**Q66 – Timeout jednoho volání CA EET API.** Zdroje ho neuvádějí;
+`response_timeout_ms` (4 s) patří k evidenci tržeb.
+- a) Nový config `renewal.timeout_ms`, výchozí `10000`, platné hodnoty
+  int ≥ 1000. ★
+- b) Použít `response_timeout_ms`.
+
+Odpověď: A
+
+---
+
+## Kolo 17 – nejasnosti z testů obnovy certifikátu (2026-11-16)
+
+Tester našel místa, která `spec/12` nechává otevřená. Upřesnění bez
+nového chování (R90 jen pro novou obnovu, `request_id` bez unique, formát
+výstupu, `problem_detail` u PKCS#12 bez klíče) doplní architekt přímo do
+spec. Rozhodnutí o chování:
+
+**Q67 – `ack-download` vrátí 400 nebo 401.** Nástupce je v té chvíli už
+uložený a pokladny přepnuté (R96). Doslovné čtení R101 dává `Failed`, takže
+by certifikát ztratil nástupce (`successor()` počítá jen `Acknowledging`
+a `Completed`) a mohl se obnovovat znovu.
+- a) Konečný problém v `Acknowledging` → `Completed` s
+  `acknowledged_at = null` a vyplněným `problem` (`RequestFailed`)
+  a `problem_detail`; `CertificateRenewalFailed` se nevyvolá. Nástupce zůstává
+  platný. ★
+- b) `Failed` podle doslovného R101 (nástupce zůstane uložený, ale nebude
+  nástupcem).
+
+Odpověď: A (2026-11-16)
+
+**Q68 – Exit kód `eet:certificate:renew` v okrajových případech.**
+- a) Obsazený zámek („běží jinde“) a `--dry-run` → kód 0 (nic neselhalo);
+  neočekávaná výjimka u jednoho certifikátu se vypíše (bez citlivých
+  údajů), ostatní certifikáty se zpracují a příkaz skončí kódem 1. ★
+- b) Obsazený zámek → kód 1 (monitoring ho uvidí).
+
+Odpověď: A (2026-11-16)
+
+---
+
+## Kolo 18 – po implementaci obnovy certifikátu (2026-11-17)
+
+**Q69 – Obnova v `Acknowledging`, když klíč starého certifikátu nejde
+dešifrovat** (např. po změně `APP_KEY`). Nástupce je uložený a pokladny
+přepnuté. Ack ale nejde podepsat. R97 řeší jen vypršení starého certifikátu,
+R98 se na `Acknowledging` nevztahuje. Implementer zatím nechal obnovu
+v `Acknowledging` s dočasným problémem `TemporaryError`
+(`certificate_unusable`) do vypršení starého certifikátu. `eet:status` to
+ale nehlásí (R106 hlásí jen `Failed` a `UnknownPendingRequest`).
+- a) Stejně jako u vypršení: ack se nepošle a obnova přejde do `Completed`
+  s `acknowledged_at = null` a `problem = CertificateUnusable`. Nástupce
+  zůstává a CA data stejně smaže po 30 dnech. ★
+- b) Ponechat chování implementace (dočasný problém do vypršení starého
+  certifikátu).
+
+Odpověď: A (2026-11-17)
+
+---
+
+## Kolo 19 – po revizi obnovy certifikátu (reviewer + security, 2026-11-17)
+
+`composer test` 901/901. Reviewer: nic blokujícího, chyba F1 + upřesnění.
+Security: jeden vysoký a jeden střední nález, zbytek zpevnění.
+
+**Q70 – (security, vysoký) HTTP eventy prozradí PKCS#12 a heslo.**
+`Http::withoutGlobalConfiguration()` vypne jen globální middleware, ale
+Laravel dál vyvolává eventy `RequestSending` (s JWT) a `ResponseReceived`
+(s celou odpovědí `claim-download`, tj. base64 PKCS#12 a heslem). Telescope
+nebo jiný logger hostitele by je uložil, což porušuje R103. U odesílání tržeb
+jsou eventy záměrně povolené (R66, Q43), protože v nich nic tajného není.
+- a) Volání CA EET API se posílají **bez HTTP eventů**; `Http::fake()`
+  (stuby, záznam, `preventStrayRequests`) dál platí. Test: listener na
+  `ResponseReceived`/`RequestSending` nic z volání CA neuvidí. ★
+- b) Eventy ponechat jen pro volání bez tajných dat (vše kromě
+  `claim-download`).
+
+Odpověď: A (2026-11-17)
+
+**Q71 – (security, střední) Kontrola vydavatele nástupce.** R95 kontroluje
+CN, `validTo` a shodu s metadaty ze **stejné** odpovědi. Podvržená odpověď
+(kompromitovaný endpoint, zachycené TLS) by mohla podstrčit self-signed
+certifikát se správným CN a R96 by na něj přepnul pokladny.
+- a) Nástupce musí navíc mít produkční politiku (`…10.1.…`), stejný DN
+  vydavatele a stejný identifikátor klíče autority (AKI) jako obnovovaný
+  certifikát. Pokud je ve uložené certifikační cestě obnovovaného
+  certifikátu certifikát vydavatele, musí podpis nástupce ověřit. Jinak
+  `CertificateMismatch`. ★
+- b) Jen produkční politika a DN vydavatele.
+- c) Nic navíc (spolehnout se na TLS).
+
+Odpověď: A (2026-11-17)
+
+**Q72 – Zpevnění z revize (security, nízké).**
+- a) Vše dle návrhu: ★
+  1. TTL zámku R104 = `max_wait_seconds` + 5 × `renewal.timeout_ms` + 60 s
+     a přechody stavu obnovy se zapisují jen ze stavu, ze kterého krok
+     vycházel (souběžný zápis neprepíše `Acknowledging` na `Failed`);
+  2. příkaz u neočekávané výjimky vypíše zprávu jen u výjimek balíčku,
+     u ostatních (např. `QueryException` s bindingy) jen třídu;
+  3. `problem_detail` se před uložením zbaví řídicích znaků (C0, C1, DEL);
+  4. `reqId` v odpovědi `status` se musí shodovat s `request_id` obnovy,
+     jinak `TemporaryError`;
+  5. eventy `CertificateRenewed` a `CertificateRenewalFailed` používají
+     `SerializesModels`.
+- b) Jen body: ___
+
+Odpověď: A (2026-11-17)
+
+**Q73 – Upřesnění z revize (reviewer).**
+- a) Vše dle návrhu: ★
+  1. (F1, chyba) přechod do `Completed` po vypršení starého certifikátu
+     vynuluje `problem` a `problem_detail` (předchozí dočasný problém
+     nezůstane viset); výjimkou je jen `CertificateUnusable` (Q69)
+     a `RequestFailed` (Q67);
+  2. R93 doplnit chování implementace: `reqId` z `not-finished`, který patří
+     ne-`Failed` obnově téhož certifikátu, se ignoruje; převzetí `reqId`
+     z dřívější `Failed` obnovy má přednost před neznámými `reqId` ve stejné
+     odpovědi;
+  3. R101: **jakýkoli** HTTP status mimo dokumentovaný úspěch (renew 201,
+     ack 204, ostatní 200) a mimo 400/401/404/409 je `TemporaryError`;
+  4. `--dry-run` vyhodnotí R90 a certifikát, který obnovit nejde, vypíše
+     jako „nelze obnovit“ (kód 1 stejně jako ostrý běh); `--certificate`
+     s `--taxpayer` vypíše u certifikátu jiného poplatníka „nepatří
+     zadanému poplatníkovi“ (kód 1);
+  5. test na import `.p12` bez klíče (`MissingPrivateKey` místo dřívějšího
+     `Unreadable`) a řádek do CHANGELOG (zapíše člověk).
+
+Odpověď: A (2026-11-17)
+
+---
+
+## Kolo 20 – po kontrolní revizi obnovy (reviewer + security, 2026-11-17)
+
+`composer test` 930/930, lokálně i s nejnižšími závislostmi (Laravel 12.71,
+Testbench 10.2, Pest 4.6; PHP 8.5). Opravy bez nového rozhodnutí (spadají pod
+R94, R96, R104): ošetření selhání commitu ruční transakce, přetečení
+obřího `pollAfterSeconds`, souběžný insert nástupce (unique) → krok se
+zahodí, přesnější hledání OID politiky, doplnění testů (TTL zámku,
+souběh v kroku stažení, text u `--taxpayer`, hlídání privátních vlastností
+`PendingRequest`).
+
+**Q74 – Nástupce, když v uložené cestě chybí vydavatel.** Q71 ověřuje
+podpis nástupce jen tehdy, když uložená certifikační cesta obnovovaného
+certifikátu obsahuje jeho vydavatele. Jinak zbývají jen DN vydavatele, AKI
+a OID politiky, a ty jde zkopírovat. Podvržená odpověď by tak prošla
+a pokladny by se přepnuly na nepoužitelný certifikát (tržby by EET
+odmítal; klíč by ale nebyl kompromitován). PKCS#12 z DIS+ cestu obsahuje.
+U PEM importu bez cesty chybí.
+- a) Fail closed: když v uložené cestě není certifikát se subjektem rovným
+  DN vydavatele obnovovaného certifikátu, je to `CertificateMismatch`
+  (a `eet:status` to nahlásí). Certifikát vydavatele se hledá podle DN
+  a ověřuje se podpisem, ne jen podle SKI/AKI. README: importovat
+  s certifikační cestou. ★
+- b) Ponechat Q71: bez vydavatele v cestě se podpis neověřuje.
+- c) Přibalit a připnout certifikáty CA EET (EETv2 NCA SubCA RSA) jako
+  kotvu důvěry; zdroj certifikátů by ale musel povolit člověk (B2).
+
+Odpověď: A (2026-11-17)
+
+**Q75 – (security, nízké, follow-up) Šifrovaný klíč v `QueryException`.**
+Když uložení certifikátu selže jinou chybou DB než duplicitou, Laravel vloží
+do zprávy `QueryException` SQL s bindingy, tedy i PEM a **zašifrovaný**
+`private_key`. Výjimka z `Eet::importCertificate()` i
+`Eet::renewCertificate()` tak doputuje do logu hostitele. Na `main` se
+`ImportCertificate` chová stejně, takže nejde o regresi. Doslova to R15
+neporušuje (nejde o čistý klíč), ale log spolu s uniklým `APP_KEY` dává
+klíč v otevřené podobě.
+- a) R15 platí i pro šifrovaný klíč: v obou místech zápisu certifikátu se
+  `QueryException` znovu vyhodí bez bindingů (stejné spojení a SQL,
+  původní výjimka jako `previous`). Veřejný kontrakt se nemění. Udělat
+  v tomto PR. ★
+- b) Totéž, ale jako samostatné GitHub issue po mergi.
+- c) Ponechat; šifrovaný text R15 nepokrývá.
+
+Odpověď: A (2026-11-17). Upřesnění architekta: jako `previous` se předá výjimka ovladače (PDO), ne původní `QueryException`, protože Laravel skládá zprávu z `previous` a bindingy by se vrátily.
+
+Follow-up po závěrečné revizi (security, nízké, není regrese; navrženo jako
+GitHub issue): na PostgreSQL přidá PDO u porušení NOT NULL / CHECK (SQLSTATE
+23502, 23514) do zprávy `DETAIL: Failing row contains (…)` se všemi
+hodnotami řádku včetně PEM a šifrovaného klíče. Vlastní schéma balíčku to
+nevyvolá, nastane to jen po úpravě schématu hostitelem. Návrh: `QueryErrors`
+u SQLSTATE třídy 23 nahradí výjimku ovladače očištěnou `PDOException`
+(jen SQLSTATE a první řádek zprávy).
+
+## Kolo 21 – odstranění stropu PHPStanu (issue #6, 2026-11-17)
+
+**Q76 – Strop `phpstan/phpstan <2.3.6` nejde odstranit pro linie s Pest 4.**
+Plugin `pestphp/pest-plugin-type-coverage` opravil nekompatibilitu
+s PHPStan 2.3.6 (Q47) jen v řadě 5.x (v5.1.1). Nejnovější 4.x (v4.0.4) dál
+padá na `AnalyserResult::getCollectedData()`. Ověřeno lokálně bez stropu:
+Laravel 12 / Testbench 10 prefer-stable (Pest 4.7.8, plugin 4.0.4,
+PHPStan 2.3.6) → type coverage padá; prefer-lowest (PHPStan 2.1.32) a Pest 5
+(plugin 5.1.1, PHPStan 2.3.6) projdou. Podmínku „PHPStan <2.3.6 jen
+s pluginem 4.x“ `composer.json` vyjádřit neumí. `composer.json` mění jen
+člověk, workflow devops.
+- a) Strop v `composer.json` ponechat a issue #6 nechat otevřené, dokud
+  plugin nevydá opravu i v řadě 4.x (nebo dokud matice nepřestane
+  podporovat Pest 4). Nic se nemění. ★
+- b) Strop z `composer.json` odstranit a v `tests.yml` u linií s Pest 4
+  přidat `composer require "phpstan/phpstan:<2.3.6" --no-update` (devops).
+  Pest 5 linie dostanou aktuální PHPStan; workflow nese výjimku navíc.
+- c) Zvednout spodní hranici pluginu na `^5.1.1`, tedy fakticky ukončit
+  podporu Pest 4 (mění podporovanou matici v `spec/05-infrastructure.md`,
+  breaking pro vývoj, ne pro hostitele).
+
+Odpověď: A (2026-11-17)
+
+Doplnění k Q64 (2026-11-17): PR #9 (obnova certifikátu) člověk mergnul bez
+běhu CI matice (odchylka → b pro tento PR). PHP 8.3 a Windows zůstávají
+neověřené do příštího běhu CI.

@@ -78,4 +78,27 @@ return [
         'Production' => 'Produkční prostředí',
     ],
 
+    'renewal_statuses' => [
+        'Requesting' => 'Žádost o certifikát',
+        'InProcess' => 'Čeká se na vydání',
+        'Downloading' => 'Stahování certifikátu',
+        'Acknowledging' => 'Potvrzení převzetí',
+        'Completed' => 'Dokončeno',
+        'Failed' => 'Selhalo',
+    ],
+
+    'renewal_problems' => [
+        'NotProductionCertificate' => 'Obnovují se jen produkční certifikáty',
+        'CertificateNotValid' => 'Certifikát není platný',
+        'CertificateUnusable' => 'Privátní klíč certifikátu nejde dešifrovat',
+        'AlreadyRenewed' => 'Certifikát už byl obnoven',
+        'TemporaryError' => 'Dočasná chyba API CA EET; další běh to zkusí znovu',
+        'UnknownPendingRequest' => 'V CA EET čeká neznámá žádost o certifikát; dokončete ji v DIS+ nebo počkejte na její ukončení',
+        'Rejected' => 'CA EET žádost zamítla',
+        'AlreadyFinished' => 'CA EET žádost už ukončila',
+        'RequestFailed' => 'CA EET volání odmítla',
+        'CertificateUnreadable' => 'Stažený certifikát nejde načíst',
+        'CertificateMismatch' => 'Stažený certifikát neodpovídá obnovovanému certifikátu',
+    ],
+
 ];

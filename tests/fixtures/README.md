@@ -79,3 +79,34 @@ UUID `60b96f2c-e521-47e1-92aa-cb60f3034f6e`, `dat_prij`
 `spec/zadani/mfcr/EETXMLSchema.xsd` (validace odeslané zprávy, R30).
 Podpis vzorku i vzorového požadavku ověřuje i testovací helper
 `tests/Support/SoapMessage.php::verifySignature()`.
+
+## `renewal/` – obnova pokladního certifikátu (spec/12)
+
+Vygeneruje je samostatně `tests/fixtures/generate-renewal.sh` (ostatní
+fixtures nemění). Vlastní testovací CA (`ca.pem`) zastupuje CA EET. Testy obnovy
+mrazí čas na 2026-11-19 00:00 UTC (`CaEetApi::NOW`).
+
+| Soubor | Obsah |
+|---|---|
+| `CZ00000019-until-2026-12-10.pem` | obnovovaný certifikát (politika `1.2.203.19122063.10.1.102.0.1`), 2025-12-10 – 2026-12-10 00:00 UTC, přesně 21 dní po `NOW` |
+| `CZ00000019-until-2026-12-11.pem` | totéž, končí o den později (22 dní, mimo okno) |
+| `CZ00000019-until-2026-12-05.pem`, `CZ00000019-until-2027-06-30.pem` | další produkční certifikáty (v okně / mimo okno) |
+| `CZ683555118-until-2026-12-10.pem` | produkční certifikát jiného poplatníka |
+| `CZ00000019-policy-10-1-other.pem` / `-policy-10-10.pem` | politika `…10.1.5` (produkční) / `…10.10.1` (není produkční) |
+| `successor.p12` | nástupce (nový PKCS#12, heslo `Renew123`), sériové číslo `24961511666821687692`, 2026-11-18 – 2027-11-19 |
+| `successor.legacy.p12` | týž nástupce jako legacy PKCS#12 |
+| `successor-without-key.p12` | týž certifikát bez klíče |
+| `successor-other-cn.p12` | CN `CZ683555118` |
+| `successor-same-valid-to.p12` | `validTo` = `validTo` obnovovaného certifikátu |
+| `successor-CZ683555118.p12` | nástupce `CZ683555118-until-2026-12-10.pem` |
+| `successor-rogue-ca.p12` | stejný DN vydavatele, jiný klíč i AKI (podvržená CA) |
+| `successor-rogue-same-aki.p12` | stejný DN vydavatele i AKI, podpis jiným klíčem |
+| `successor-other-issuer.p12` | jiný DN vydavatele |
+| `successor-no-policy.p12`, `successor-playground-policy.p12` | vydal `ca.pem`, bez politiky / s politikou playground |
+| `successor-self-signed.p12` | self-signed, CN `CZ00000019`, produkční politika |
+
+Všechny listy mají `subjectKeyIdentifier` a `authorityKeyIdentifier`;
+nástupci kromě uvedených výjimek vydala `ca.pem` a mají stejný AKI jako
+obnovované certifikáty.
+
+PEM soubory obsahují certifikát, nešifrovaný klíč a `ca.pem`.

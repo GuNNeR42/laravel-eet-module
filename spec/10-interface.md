@@ -7,7 +7,8 @@
 >
 > Pravidla: `R1–R18`, `R59–R60`, `R69–R70` v
 > `spec/11-poplatnik-a-certifikat.md`; `R19–R58`, `R61–R68`, `R71–R72` v
-> `spec/20-evidence-trzby.md`.
+> `spec/20-evidence-trzby.md`; `R90–R106` ve
+> `spec/12-obnova-certifikatu.md` (issue #2, nic z toho není BREAKING).
 
 Namespace: `Gunner42\LaravelEetModule\`. Níže se uvádí relativně.
 
@@ -30,6 +31,7 @@ routy ani pohledy.
 | `createCashRegister(Models\RegistrationUnit $unit, string $identifier, ?string $name = null, ?Models\CashRegisterCertificate $certificate = null)` | `Models\CashRegister` | `InvalidIdentifier`, `DuplicateCashRegister`, `CertificateTaxpayerMismatch` | R6–R8 |
 | `importCertificate(Models\Taxpayer $taxpayer, #[\SensitiveParameter] string $contents, #[\SensitiveParameter] ?string $password = null)` | `Models\CashRegisterCertificate` | `InvalidCertificate` | R9–R15, R70 |
 | `supportsLegacyPkcs12()` | `bool` | – | R70 |
+| `renewCertificate(Models\CashRegisterCertificate $certificate)` | `?Models\CertificateRenewal` (`null` = zámek obsazen, R104) | `CertificateNotRenewable`, `InvalidConfiguration`, `ActiveDatabaseTransaction` | R90–R104 |
 | `register(Models\CashRegister $cashRegister, Data\SaleData $data)` | `Models\Sale` | `InvalidSaleData`, `DuplicateSequenceNumber`, `InvalidConfiguration`, `ActiveDatabaseTransaction` | R19–R47, R61–R68 |
 | `reverse(Models\Sale $original, Data\ReversalData $data)` | `Models\Sale` | jako `register` + `InvalidAmount`, `ReversalTaxpayerMismatch`, `ReversalEnvironmentMismatch` | R48–R50 |
 | `resubmit(Models\Sale $sale, bool $force = false)` | `Models\Sale` | `InvalidConfiguration`, `SaleNotReopenable`, `ActiveDatabaseTransaction` | R45, R63, R64, R72 |
@@ -47,7 +49,7 @@ Facade deleguje na tyto třídy. Hostitel je smí volat přímo; signatura
 `handle()` je stejná jako u facade metody.
 
 `CreateTaxpayer`, `ChangeTaxpayerEnvironment`, `CreateRegistrationUnit`, `CreateCashRegister`,
-`ImportCertificate`, `RegisterSale`, `ReverseSale`, `ResubmitSale` (jeden
+`ImportCertificate`, `RenewCertificate`, `RegisterSale`, `ReverseSale`, `ResubmitSale` (jeden
 pokus; jinou třídou je job), `VerifyConnection`, `PruneRawMessages`
 (`handle(int $days): int` = počet upravených pokusů).
 
@@ -115,6 +117,8 @@ Každý enum má `label(): string` (překlad, R58).
 | `CertificateProblem` | string | `Unreadable`, `MissingPrivateKey`, `KeyMismatch`, `Expired`, `UnsupportedLegacyFormat` (hodnota = snake_case) |
 | `SaleDataProblem` | string | `InvalidFormat`, `DelegatingEicEqualsTaxpayerEic`, `TooOld`, `BeforeEnvironmentStart`, `SignMismatch`, `PartsExceedTotal` (hodnota = snake_case) |
 | `PreflightWarning` | string | `SaleInFuture`, `UnusualRegistrationUnitNumber`, `CertificateEicMismatch` (hodnota = snake_case) |
+| `RenewalStatus` | string | `Requesting`, `InProcess`, `Downloading`, `Acknowledging`, `Completed`, `Failed` (hodnota = snake_case); metody `isActive(): bool` (první čtyři) |
+| `RenewalProblem` | string | předpoklady: `NotProductionCertificate`, `CertificateNotValid`, `CertificateUnusable`, `AlreadyRenewed`; dočasné: `TemporaryError`, `UnknownPendingRequest`; konečné: `Rejected`, `AlreadyFinished`, `RequestFailed`, `CertificateUnreadable`, `CertificateMismatch` (+ `CertificateNotValid`, `CertificateUnusable`) (hodnota = snake_case); metoda `isTemporary(): bool` |
 
 ## 5. Výjimky (`Exceptions\*`)
 
@@ -132,6 +136,7 @@ nikdy neobsahují privátní klíč ani heslo (R15).
 | `ActiveDatabaseTransaction` | – | R72 |
 | `InvalidCertificate` | `Enums\CertificateProblem $problem` | R9, R10 |
 | `CertificateTaxpayerMismatch` | – | R8 |
+| `CertificateNotRenewable` | `Enums\RenewalProblem $problem` | R90 |
 | `ReversalTaxpayerMismatch` | – | R49 |
 | `ReversalEnvironmentMismatch` | – | R49 |
 | `SaleNotReopenable` | `?int $errorCode` | R64 |
@@ -179,6 +184,21 @@ Relace: `registrationUnit()`, `certificate()`, `sales()`. Accessor `taxpayer`.
 | `private_key` | text | cast `encrypted`, `$hidden` |
 
 Metody `isValidAt(\DateTimeInterface $moment): bool` a `isUsable(): bool` (klíč jde dešifrovat, R69).
+Navíc (R90–R96): `hasProductionPolicy(): bool` (OID `1.2.203.19122063.10.1.…`), `isInRenewalWindow(): bool` (podle `now()` a `renewal.days_before_expiry`), relace `renewals()` (HasMany `CertificateRenewal`), `successor(): ?CashRegisterCertificate` (nástupce z obnovy `Acknowledging`/`Completed`), `predecessor(): ?CashRegisterCertificate`, `latestRenewal(): ?CertificateRenewal` (nejvyšší `id`). Tabulka se nemění.
+
+### `CertificateRenewal` → `eet_certificate_renewals` (R92–R102)
+
+| Sloupec | Typ | Poznámka |
+|---|---|---|
+| `certificate_id` | FK → `eet_cash_register_certificates` | obnovovaný certifikát |
+| `successor_id` | FK null → `eet_cash_register_certificates` | nástupce, R96 |
+| `request_id` | uuid null, index (ne unique, R93) | `reqId` CA; null v `Requesting` |
+| `status` | string | cast `RenewalStatus` |
+| `problem` | string null | cast `RenewalProblem`, poslední problém |
+| `problem_detail` | string(255) null | R101 |
+| `acknowledged_at`, `completed_at`, `failed_at` | datetime null | cast `immutable_datetime` |
+
+Relace `certificate()`, `successor()`. Nejvýš jedna aktivní obnova na certifikát (R92).
 
 ### `Sale` → `eet_sales`
 
@@ -245,7 +265,7 @@ nebo vlastní testovací CA.
 
 ## 7. Eventy (`Events\*`)
 
-Všechny mají `public readonly Models\Sale $sale` a vyvolávají se po commitu
+Eventy tržeb mají `public readonly Models\Sale $sale` a vyvolávají se po commitu
 (R39).
 
 | Event | Navíc |
@@ -258,10 +278,18 @@ Všechny mají `public readonly Models\Sale $sale` a vyvolávají se po commitu
 | `SaleReopened` | – |
 | `SalePreflightWarned` | `list<Enums\PreflightWarning> $warnings` (jen nová) |
 
+Eventy obnovy certifikátu (po commitu, bez `$sale`, `SerializesModels`):
+
+| Event | Vlastnosti | Pravidla |
+|---|---|---|
+| `CertificateRenewed` | `Models\CashRegisterCertificate $certificate`, `Models\CashRegisterCertificate $successor`, `Models\CertificateRenewal $renewal` | R96 |
+| `CertificateRenewalFailed` | `Models\CashRegisterCertificate $certificate`, `Models\CertificateRenewal $renewal`, `Enums\RenewalProblem $problem` | R102 |
+
 ## 8. Job
 
 Cache zámek pokusu: klíč `laravel-eet-module:sale:{id}`, TTL
-`response_timeout_ms` + 30 s (R43).
+`response_timeout_ms` + 30 s (R43). Zámek obnovy certifikátu:
+`laravel-eet-module:certificate:{id}`, TTL `renewal.max_wait_seconds` + 5 × ⌈`renewal.timeout_ms` / 1000⌉ + 60 s (R104).
 
 `Jobs\ResubmitSale` (`ShouldQueue`), konstruktor `(int $saleId)`. Spojení,
 fronta a zpoždění podle configu (R40–R43).
@@ -271,13 +299,14 @@ fronta a zpoždění podle configu (R40–R43).
 | Signatura | Exit kódy | Pravidla |
 |---|---|---|
 | `eet:certificate:import {path} {--taxpayer=} {--password-stdin}` | 0 OK, 1 chyba | R18 |
+| `eet:certificate:renew {--taxpayer=*} {--certificate=*} {--dry-run}` | 0 žádná obnova `Failed` ani s dočasným problémem, žádný předpoklad / ID neselhal a žádná neočekávaná výjimka (obsazený zámek a `--dry-run` = 0); 1 jinak | R105 |
 | `eet:verify {eic} {registration-unit} {cash-register}` | 0 `Verified`, 1 jinak | R55 |
 | `eet:resubmit {--sale=*} {--force}` | 0 nic nezůstalo `Unconfirmed`, žádné znovuotevření neselhalo a žádné ID nechybělo; 1 jinak | R53, R63, R64 |
-| `eet:status` | 0 nic z výčtu R54 nenastalo (po lhůtě, produkční `Rejected`, varování k módu, podpisovému certifikátu, trust store a fake tržbám); 1 jinak | R54 |
+| `eet:status` | 0 nic z výčtu R54 a R106 nenastalo (po lhůtě, produkční `Rejected`, varování k módu, podpisovému certifikátu, trust store a fake tržbám, certifikát v okně obnovy bez nástupce, obnova `Failed` nebo `UnknownPendingRequest`); 1 jinak | R54, R106 |
 | `eet:prune {--days=}` | 0 OK, 1 `InvalidConfiguration` (R68) | R52 |
 
 Balíček sám nic neplánuje. README doporučí hostiteli naplánovat
-`eet:resubmit` a `eet:status` jako pojistku.
+`eet:resubmit` a `eet:status` jako pojistku a `eet:certificate:renew` denně.
 
 ## 10. Konfigurace `config/laravel-eet-module.php` (klíč `laravel-eet-module`)
 
@@ -312,6 +341,11 @@ s názvem klíče (R68).
 | `verification.sequence_number` | `'OVERENI'` | maska `porad_cis` (R20) | R47, Q36 |
 | `resubmission.max_ambiguous_attempts` | `3` | int ≥ 1 | R41 |
 | `retention.raw_xml_days` | `null` | `null` nebo int ≥ 1 | R52 |
+| `renewal.endpoint` | `'https://ca.caeet.gov.cz/api'` | `https`, hostitel z `renewal.allowed_hosts`, port prázdný nebo 443, bez userinfo; v testech i `http://127.0.0.1:<port>` | R100 |
+| `renewal.allowed_hosts` | `['ca.caeet.gov.cz', 'ca.zkus.caeet.gov.cz', 'ca.test.caeet.gov.cz']` | neprázdný seznam DNS jmen (ne IP) | R100 |
+| `renewal.days_before_expiry` | `21` | int 1–365 | R105, R106, Q54 |
+| `renewal.max_wait_seconds` | `120` | int ≥ 0 | R94, Q57 |
+| `renewal.timeout_ms` | `10000` | int ≥ 1000 | R100, Q66 |
 
 ## 11. Publish tagy
 
@@ -335,6 +369,8 @@ Přibalené certifikáty CA I.CA (`resources/certs/*.pem`) se nepublikují; pře
 | `laravel-eet-module::messages.certificate_problems.<KlíčEnumu>` | `CertificateProblem` |
 | `laravel-eet-module::messages.sale_data_problems.<KlíčEnumu>` | `SaleDataProblem` |
 | `laravel-eet-module::messages.preflight_warnings.<KlíčEnumu>` | `PreflightWarning` |
+| `laravel-eet-module::messages.renewal_statuses.<KlíčEnumu>` | `RenewalStatus` |
+| `laravel-eet-module::messages.renewal_problems.<KlíčEnumu>` | `RenewalProblem` |
 
 Příklad: `laravel-eet-module::messages.error_codes.TemporaryTechnicalError`.
 

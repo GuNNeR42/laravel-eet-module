@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Gunner42\LaravelEetModule\Console\Commands;
 
+use Carbon\CarbonImmutable;
 use Gunner42\LaravelEetModule\Actions\NotifyOverdueSale;
 use Gunner42\LaravelEetModule\Enums\AttemptOutcome;
 use Gunner42\LaravelEetModule\Enums\Environment;
+use Gunner42\LaravelEetModule\Enums\RenewalProblem;
+use Gunner42\LaravelEetModule\Enums\RenewalStatus;
 use Gunner42\LaravelEetModule\Enums\SaleStatus;
 use Gunner42\LaravelEetModule\Enums\SendingMode;
 use Gunner42\LaravelEetModule\Exceptions\InvalidConfiguration;
+use Gunner42\LaravelEetModule\Models\CashRegisterCertificate;
 use Gunner42\LaravelEetModule\Models\Sale;
 use Gunner42\LaravelEetModule\Models\SubmissionAttempt;
 use Gunner42\LaravelEetModule\Models\Taxpayer;
@@ -18,14 +22,15 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Overview for monitoring (R54): counts by status and environment, overdue
- * and rejected production sales and configuration warnings.
+ * Overview for monitoring (R54, R106): counts by status and environment,
+ * overdue and rejected production sales, configuration warnings and
+ * certificates that need a renewal.
  */
 final class StatusCommand extends Command
 {
     protected $signature = 'eet:status';
 
-    protected $description = 'Show sales that need attention; exits with 1 when there are any.';
+    protected $description = 'Show sales and certificates that need attention; exits with 1 when there are any.';
 
     public function handle(ConfigurationValidator $configuration, NotifyOverdueSale $notifyOverdue): int
     {
@@ -42,6 +47,7 @@ final class StatusCommand extends Command
         $findings = $this->overdue($notifyOverdue);
         $findings = $this->rejected() || $findings;
         $findings = $this->configurationWarnings() || $findings;
+        $findings = $this->certificates() || $findings;
 
         return $findings ? self::FAILURE : self::SUCCESS;
     }
@@ -140,6 +146,45 @@ final class StatusCommand extends Command
         if (Sale::query()->where('environment', Environment::Production->value)->where('is_fake', true)->exists()) {
             $this->warn('Production sales created under Eet::fake() exist.');
             $findings = true;
+        }
+
+        return $findings;
+    }
+
+    /**
+     * Valid production certificates in the renewal window without a
+     * successor and valid certificates whose latest renewal failed or waits
+     * for an unknown request (R106).
+     */
+    private function certificates(): bool
+    {
+        $now = CarbonImmutable::now();
+        $findings = false;
+
+        foreach (CashRegisterCertificate::query()->orderBy('id')->get() as $certificate) {
+            if (! $certificate->isValidAt($now)) {
+                continue;
+            }
+
+            $latest = $certificate->latestRenewal();
+            $needsRenewal = $certificate->hasProductionPolicy() && $certificate->isInRenewalWindow() && $certificate->successor() === null;
+            $renewalFailed = $latest !== null
+                && ($latest->status === RenewalStatus::Failed || $latest->problem === RenewalProblem::UnknownPendingRequest);
+
+            if (! $needsRenewal && ! $renewalFailed) {
+                continue;
+            }
+
+            if (! $findings) {
+                $this->error('Cash register certificates that need a renewal:');
+                $findings = true;
+            }
+
+            $this->line("  Certificate #{$certificate->id}");
+            $this->line("    CN: {$certificate->subject_eic}");
+            $this->line('    Valid to: '.$certificate->valid_to->format('Y-m-d'));
+            $this->line('    Latest renewal: '.($latest === null ? '-' : $latest->status->label()));
+            $this->line('    Problem: '.($latest?->problem === null ? '-' : $latest->problem->label()));
         }
 
         return $findings;

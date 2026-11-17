@@ -12,10 +12,12 @@ use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\ResponseInterface;
+use SensitiveParameter;
 use Throwable;
 
 /**
- * Sends a data message through the Laravel HTTP client (R32, R66). The
+ * Sends a data message (R32, R66) or calls the CA EET API (R100) through
+ * the Laravel HTTP client. The
  * request is built without the global options of the host, so only the
  * options below apply; Http::fake() stubs and recording keep working.
  * Exception texts are never stored; only a category is returned. Only
@@ -29,6 +31,39 @@ final class Transport
 
     public function send(string $url, string $xml): TransportResult
     {
+        return $this->exchange(
+            'POST',
+            $url,
+            ['SOAPAction' => 'http://fs.gov.cz/eet/OdeslaniTrzby', 'Connection' => 'close'],
+            $xml,
+            ConfigurationValidator::integer('response_timeout_ms'),
+            true,
+        );
+    }
+
+    /**
+     * A request without a body that accepts JSON, e.g. to the CA EET API
+     * (R100). The same transport rules apply as to the data messages (R66),
+     * but no HTTP client events are dispatched, because they would expose the
+     * token and the response to host listeners (R103, Q70).
+     */
+    public function requestJson(string $method, string $url, #[SensitiveParameter] string $bearerToken, int $timeoutMs): TransportResult
+    {
+        return $this->exchange(
+            $method,
+            $url,
+            ['Accept' => 'application/json', 'Authorization' => 'Bearer '.$bearerToken],
+            null,
+            $timeoutMs,
+            false,
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function exchange(string $method, string $url, #[SensitiveParameter] array $headers, ?string $body, int $timeoutMs, bool $dispatchEvents): TransportResult
+    {
         $maxBytes = $this->maxBytes();
         $proxy = config('laravel-eet-module.proxy');
         $tooLarge = false;
@@ -41,7 +76,7 @@ final class Transport
 
         $options = [
             // seconds as float is the Guzzle API; the float ban of AGENTS.md covers money and quantities
-            'timeout' => ConfigurationValidator::integer('response_timeout_ms') / 1000,
+            'timeout' => $timeoutMs / 1000,
             'verify' => true,
             'allow_redirects' => false,
             'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT,
@@ -68,13 +103,10 @@ final class Transport
         $options['sink'] = $sink;
 
         try {
-            $response = $this->request($options)
-                ->withHeaders([
-                    'SOAPAction' => 'http://fs.gov.cz/eet/OdeslaniTrzby',
-                    'Connection' => 'close',
-                ])
-                ->withBody($xml, 'text/xml; charset=utf-8')
-                ->post($url);
+            $request = $this->pendingRequest($options, $dispatchEvents)->withHeaders($headers);
+            $response = $body === null
+                ? $request->send($method, $url)
+                : $request->withBody($body, 'text/xml; charset=utf-8')->post($url);
         } catch (TransferException|HttpClientException|ResponseTooLarge $exception) {
             // only real transfer errors become an outcome; anything else propagates (R33)
             if ($tooLarge || BoundedSink::exceeded($sinkId)) {
@@ -95,13 +127,13 @@ final class Transport
             return TransportResult::timeout();
         }
 
-        $headers = [];
+        $responseHeaders = [];
 
         foreach ($response->headers() as $name => $values) {
-            $headers[strtolower((string) $name)] = implode(', ', $values);
+            $responseHeaders[strtolower((string) $name)] = implode(', ', $values);
         }
 
-        return TransportResult::response($response->status(), $headers, $this->readBody($response->toPsrResponse(), $maxBytes));
+        return TransportResult::response($response->status(), $responseHeaders, $this->readBody($response->toPsrResponse(), $maxBytes));
     }
 
     public function maxBytes(): int
@@ -116,10 +148,11 @@ final class Transport
      *
      * @param  array<string, mixed>  $options
      */
-    private function request(array $options): PendingRequest
+    private function pendingRequest(array $options, bool $dispatchEvents): PendingRequest
     {
-        return Http::withoutGlobalConfiguration(static fn (): PendingRequest => Http::createPendingRequest())
-            ->withOptions($options);
+        $request = Http::withoutGlobalConfiguration(static fn (): PendingRequest => Http::createPendingRequest());
+
+        return ($dispatchEvents ? $request : SilentPendingRequest::of($request))->withOptions($options);
     }
 
     /**

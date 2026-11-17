@@ -148,17 +148,19 @@ final class CertificateReader
         }
 
         X509::clearErrors();
-        $certificate = is_string($bag['cert'] ?? null) ? X509::read($bag['cert']) : null;
 
-        if ($certificate === null) {
-            throw self::problem(CertificateProblem::Unreadable);
-        }
-
+        // without a key, OpenSSL returns the certificate among the extra certificates
         $key = is_string($bag['pkey'] ?? null) ? openssl_pkey_get_private($bag['pkey']) : false;
         X509::clearErrors();
 
         if ($key === false) {
             throw self::problem(CertificateProblem::MissingPrivateKey);
+        }
+
+        $certificate = is_string($bag['cert'] ?? null) ? X509::read($bag['cert']) : null;
+
+        if ($certificate === null) {
+            throw self::problem(CertificateProblem::Unreadable);
         }
 
         $chain = [];

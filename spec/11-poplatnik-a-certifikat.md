@@ -114,6 +114,10 @@ o odeslání vybere certifikát, kterým se datová zpráva podepíše.
   metod (veřejných i interních) a closures, které je přijímají, mají
   atribut `#[\SensitiveParameter]`. Dešifrovaný klíč se drží jen jako
   `OpenSSLAsymmetricKey`, nikdy jako vlastnost serializovatelného objektu.
+  Platí i pro **zašifrovaný** klíč: selže-li zápis certifikátu do databáze
+  (`QueryException`), výjimka se znovu vyhodí bez bindingů (stejné spojení
+  a SQL, jako `previous` výjimka ovladače databáze, ne původní `QueryException`, jejíž zpráva bindingy obsahuje), aby se PEM ani šifrovaný klíč
+  nedostaly do zprávy výjimky (Q75).
 - **R69** – Uložený klíč, který nejde dešifrovat (např. po změně `APP_KEY`
   bez `APP_PREVIOUS_KEYS`), není kandidátem pro podpis (R16).
   `CashRegisterCertificate::isUsable(): bool` vrací `false`. Pokud tím
@@ -270,7 +274,7 @@ tabulky `eet_taxpayers`, `eet_registration_units`, `eet_cash_registers` a
 
 ## Mimo rozsah
 
-- Automatizovaná obnova certifikátu přes CA EET API (issue #2).
+- Automatizovaná obnova certifikátu přes CA EET API: `spec/12-obnova-certifikatu.md`.
 - Generátor CSV evidenčních jednotek pro DIS+ (issue #3) a další údaje
   evidenční jednotky (druh, CZ-NACE, adresa).
 - Úprava a mazání poplatníků, evidenčních jednotek, pokladních zařízení

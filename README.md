@@ -54,10 +54,15 @@ The configuration lives in `config/laravel-eet-module.php`. Every value outside 
 | `response_trust_store_max_certificates` | `10` | maximum number of certificates in `response_trust_store` (at least 2) |
 | `response_signer.*` | GFŘ identity | expected signer of confirmations; set `production.common_name` once you know it (see `eet:status`) |
 | `response_clock_tolerance_seconds` | `600` | allowed difference of `dat_prij` |
-| `lock_store` | `null` | cache store for the per-sale lock (default store) |
+| `lock_store` | `null` | cache store for the per-sale and per-certificate locks (default store) |
 | `resubmission.connection`, `.queue`, `.backoff`, `.min_backoff`, `.max_ambiguous_attempts` | default connection, `[60, 300, 900, 3600]`, `30`, `3` | resubmission job |
 | `verification.sequence_number` | `OVERENI` | `porad_cis` of `Eet::verifyConnection()` |
 | `retention.raw_xml_days` | `null` | default age for `eet:prune` |
+| `renewal.endpoint` | `https://ca.caeet.gov.cz/api` | CA EET API; `https`, host from `renewal.allowed_hosts`, port 443, no IP address |
+| `renewal.allowed_hosts` | `['ca.caeet.gov.cz', 'ca.zkus.caeet.gov.cz', 'ca.test.caeet.gov.cz']` | non-empty list of DNS names |
+| `renewal.days_before_expiry` | `21` | renewal window in days (1–365) |
+| `renewal.max_wait_seconds` | `120` | how long one run waits for the issue of a certificate (0 = ask once) |
+| `renewal.timeout_ms` | `10000` | timeout of one CA EET API call (at least 1000) |
 
 The `file` lock store does not work across several servers.
 
@@ -100,6 +105,30 @@ openssl pkcs12 -legacy -in certificate.p12 -out certificate.pem
 ```
 
 In code that handles user input, call the import through the action (`app(\Gunner42\LaravelEetModule\Actions\ImportCertificate::class)->handle(...)`) or the manager (`app(\Gunner42\LaravelEetModule\Eet::class)->importCertificate(...)`) rather than the facade, and set `zend.exception_ignore_args=On`: the stack frame of a facade call holds its plain arguments.
+
+### Certificate renewal
+
+A cash register certificate is valid for 366 days. The package renews **production** certificates (certificate policy `1.2.203.19122063.10.1.…`) through the CA EET API before they expire; playground certificates are never renewed.
+
+```php
+$renewal = Eet::renewCertificate($certificate); // CertificateRenewal, or null while another process renews it
+```
+
+One call takes as many steps as it can: it asks for unfinished requests, submits the request for a successor, waits for the issue (at most `renewal.max_wait_seconds`), downloads the PKCS#12, checks it (same CN, later `validTo`, serial number and validity as announced by CA EET, production policy, same issuer DN and authority key identifier, and a signature verified by the issuer certificate from the stored chain of the renewed certificate; otherwise `CertificateMismatch`), stores the successor, switches every cash register pinned to the old certificate to the successor in the same transaction and acknowledges the download. Each API call is authenticated with a short-lived RS256 token signed by the key of the renewed certificate. CA EET API calls dispatch no Laravel HTTP client events (`RequestSending`, `ResponseReceived`, `ConnectionFailed`), so loggers such as Telescope never see the token or the PKCS#12; `Http::fake()` still answers and records them. The result of the API is the state of the renewal (`RenewalStatus`: `Requesting`, `InProcess`, `Downloading`, `Acknowledging`, `Completed`, `Failed`) and its `problem` (`RenewalProblem`), never an exception. An unfinished renewal continues on the next call.
+
+- Import the certificate **with its certificate chain** (the PKCS#12 from DIS+ contains it; for PEM append the issuing CA certificate). Without the issuer of the renewed certificate in the stored chain the successor cannot be verified and the renewal fails closed with `CertificateMismatch` (`eet:status` reports it).
+- `CertificateNotRenewable` (`problem`: `NotProductionCertificate`, `CertificateNotValid`, `CertificateUnusable`, `AlreadyRenewed`) when a new renewal cannot start; `ActiveDatabaseTransaction` inside a database transaction.
+- Temporary problems (`TemporaryError`, `UnknownPendingRequest`) keep the state; the next run tries again while the certificate is valid. `UnknownPendingRequest` means CA EET has an unfinished request the package does not know (e.g. from DIS+); finish it there or wait until it ends.
+- Final problems end in `Failed` and dispatch `CertificateRenewalFailed`; automatic renewal of that certificate stops. Renew it again manually with `Eet::renewCertificate()` or `eet:certificate:renew --certificate=ID`; a request already issued by CA EET is taken over (the PKCS#12 can be downloaded for 30 days).
+- `$certificate->successor()`, `->predecessor()`, `->latestRenewal()`, `->renewals()`, `->hasProductionPolicy()` and `->isInRenewalWindow()` describe the state. The old certificate is kept.
+
+Schedule the command daily (`--dry-run` lists what it would process and reports certificates that cannot be renewed; `--certificate=ID` together with `--taxpayer` rejects a certificate of another taxpayer); it processes certificates in the renewal window (`renewal.days_before_expiry`, default 21 days) and continues active renewals:
+
+```php
+Schedule::command('eet:certificate:renew')->daily();
+```
+
+The downloaded PKCS#12 and its password are never stored, logged or cached. If CA EET delivers the legacy PKCS#12 format and your runtime cannot read it (`Eet::supportsLegacyPkcs12()` is `false`), the renewal fails with `CertificateUnreadable` (`problem_detail` = `unsupported_legacy_format`) without acknowledging the download; enable the OpenSSL legacy provider and renew manually within 30 days.
 
 ### Registering a sale
 
@@ -149,16 +178,17 @@ php artisan eet:verify CZ00000019 181 POKLADNA-1
 
 ### Events
 
-`SaleConfirmed`, `SaleVerified`, `SaleRejected`, `SaleUnconfirmed`, `SaleOverdue` (more than 48 h unconfirmed in production), `SaleReopened` and `SalePreflightWarned` in `Gunner42\LaravelEetModule\Events`, dispatched after the database write is committed.
+`SaleConfirmed`, `SaleVerified`, `SaleRejected`, `SaleUnconfirmed`, `SaleOverdue` (more than 48 h unconfirmed in production), `SaleReopened` and `SalePreflightWarned` in `Gunner42\LaravelEetModule\Events`, dispatched after the database write is committed. Certificate renewal dispatches `CertificateRenewed` (`certificate`, `successor`, `renewal`) and `CertificateRenewalFailed` (`certificate`, `renewal`, `problem`), also after the commit; both use `SerializesModels`, so they can be queued.
 
 ### Artisan commands
 
 | Command | Purpose |
 |---|---|
 | `eet:certificate:import {path} {--taxpayer=} {--password-stdin}` | import a certificate |
+| `eet:certificate:renew {--taxpayer=*} {--certificate=*} {--dry-run}` | renew certificates in the renewal window; exits with 1 after a failed renewal or a temporary problem |
 | `eet:verify {eic} {registration-unit} {cash-register}` | verification message |
 | `eet:resubmit {--sale=*} {--force}` | resubmit now, reopen given sales |
-| `eet:status` | monitoring; exits with 1 when something needs attention |
+| `eet:status` | monitoring (sales, configuration, certificates in the renewal window without a successor, failed renewals); exits with 1 when something needs attention |
 | `eet:prune {--days=}` | delete the raw XML of old attempts |
 
 The package schedules nothing itself. Schedule the safety nets in your application:
@@ -166,6 +196,7 @@ The package schedules nothing itself. Schedule the safety nets in your applicati
 ```php
 Schedule::command('eet:resubmit')->everyFifteenMinutes();
 Schedule::command('eet:status')->hourly();
+Schedule::command('eet:certificate:renew')->daily();
 ```
 
 ## Testing your application
@@ -188,7 +219,7 @@ Under the fake nothing is sent and no certificate is needed; sales are marked `i
 ## Security notes
 
 - Error and warning texts from the EET service may contain HTML characters; escape them when displaying them.
-- Middleware registered with `Http::globalMiddleware()` sees and can change the requests to the EET service.
+- Middleware registered with `Http::globalMiddleware()` does not apply to the requests to the EET service and the CA EET API; `Http::fake()` does.
 - The data is kept permanently; the EIČ of a natural person may contain the birth number (GDPR). The package does not delete personal data.
 
 ## Changelog

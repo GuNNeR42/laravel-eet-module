@@ -11,6 +11,7 @@ use Gunner42\LaravelEetModule\Actions\CreateRegistrationUnit;
 use Gunner42\LaravelEetModule\Actions\CreateTaxpayer;
 use Gunner42\LaravelEetModule\Actions\ImportCertificate;
 use Gunner42\LaravelEetModule\Actions\RegisterSale;
+use Gunner42\LaravelEetModule\Actions\RenewCertificate;
 use Gunner42\LaravelEetModule\Actions\ResubmitSale;
 use Gunner42\LaravelEetModule\Actions\ReverseSale;
 use Gunner42\LaravelEetModule\Actions\VerifyConnection;
@@ -21,6 +22,7 @@ use Gunner42\LaravelEetModule\Data\VerificationResult;
 use Gunner42\LaravelEetModule\Enums\Environment;
 use Gunner42\LaravelEetModule\Models\CashRegister;
 use Gunner42\LaravelEetModule\Models\CashRegisterCertificate;
+use Gunner42\LaravelEetModule\Models\CertificateRenewal;
 use Gunner42\LaravelEetModule\Models\RegistrationUnit;
 use Gunner42\LaravelEetModule\Models\Sale;
 use Gunner42\LaravelEetModule\Models\Taxpayer;
@@ -70,6 +72,15 @@ class Eet
     public function supportsLegacyPkcs12(): bool
     {
         return app(CertificateReader::class)->supportsLegacyPkcs12();
+    }
+
+    /**
+     * Renews the certificate through the CA EET API; null while another
+     * process renews it (R90–R104).
+     */
+    public function renewCertificate(CashRegisterCertificate $certificate): ?CertificateRenewal
+    {
+        return app(RenewCertificate::class)->handle($certificate);
     }
 
     public function register(CashRegister $cashRegister, SaleData $data): Sale

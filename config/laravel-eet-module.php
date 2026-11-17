@@ -101,4 +101,23 @@ return [
         'raw_xml_days' => null,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Cash register certificate renewal (CA EET API)
+    |--------------------------------------------------------------------------
+    |
+    | Only production certificates are renewed. endpoint must be https on a
+    | host from allowed_hosts; the proxy, lock_store and response_max_bytes
+    | above apply as well. Schedule eet:certificate:renew daily.
+    |
+    */
+
+    'renewal' => [
+        'endpoint' => 'https://ca.caeet.gov.cz/api',
+        'allowed_hosts' => ['ca.caeet.gov.cz', 'ca.zkus.caeet.gov.cz', 'ca.test.caeet.gov.cz'],
+        'days_before_expiry' => 21,
+        'max_wait_seconds' => 120,
+        'timeout_ms' => 10000,
+    ],
+
 ];
