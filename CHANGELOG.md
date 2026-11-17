@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased](https://github.com/gunner42/laravel-eet-module/compare/v1.0.0...main)
+## [Unreleased](https://github.com/gunner42/laravel-eet-module/compare/v1.0.1...main)
+
+## [v1.0.1](https://github.com/gunner42/laravel-eet-module/compare/v1.0.0...v1.0.1) - 2026-11-17
+
+### Changed
+
+- The Composer package description and keywords describe the package (shown on Packagist).
+- Vulnerabilities are reported through GitHub private vulnerability reporting (see `SECURITY.md`).
+
+### Removed
+
+- The README no longer contains the installation guide for the former private repository; install the package from Packagist with `composer require gunner42/laravel-eet-module`.
 
 ## [v1.0.0](https://github.com/gunner42/laravel-eet-module/commits/v1.0.0) - 2026-11-17
 

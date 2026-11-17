@@ -1,9 +1,13 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "name": "gunner42/laravel-eet-module",
-    "description": "Module for CZ EET 2.0",
+    "description": "Laravel client for the Czech electronic registration of sales (EET 2.0)",
     "keywords": [
         "laravel",
+        "laravel-package",
+        "eet",
+        "eet-2",
+        "evidence-trzeb",
         "gunner42",
         "laravel-eet-module"
     ],
