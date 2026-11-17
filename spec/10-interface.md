@@ -8,7 +8,7 @@
 > Pravidla: `R1–R18`, `R59–R60`, `R69–R70` v
 > `spec/11-poplatnik-a-certifikat.md`; `R19–R58`, `R61–R68`, `R71–R72` v
 > `spec/20-evidence-trzby.md`; `R90–R106` ve
-> `spec/12-obnova-certifikatu.md` (issue #2, nic z toho není BREAKING).
+> `spec/12-obnova-certifikatu.md` (issue #2 v původním repu, nic z toho není BREAKING).
 
 Namespace: `Gunner42\LaravelEetModule\`. Níže se uvádí relativně.
 

@@ -275,7 +275,7 @@ tabulky `eet_taxpayers`, `eet_registration_units`, `eet_cash_registers` a
 ## Mimo rozsah
 
 - Automatizovaná obnova certifikátu přes CA EET API: `spec/12-obnova-certifikatu.md`.
-- Generátor CSV evidenčních jednotek pro DIS+ (issue #3) a další údaje
+- Generátor CSV evidenčních jednotek pro DIS+ (issue #1) a další údaje
   evidenční jednotky (druh, CZ-NACE, adresa).
 - Úprava a mazání poplatníků, evidenčních jednotek, pokladních zařízení
   a certifikátů přes API balíčku.

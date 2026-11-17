@@ -775,7 +775,7 @@ zelený, 659/659 na Guzzle 8.5 i 7.15.2). Zbyly drobné neblokující nálezy:
   jen běh bez `--sale`.
 
 **Q46 – Co s drobnostmi D1–D4?**
-- a) Commitnout teď do PR #4 a D1–D4 zapsat jako jedno GitHub issue
+- a) Commitnout teď do PR #4 (původní repo) a D1–D4 zapsat jako jedno GitHub issue
   („hardening po první iteraci“) na další iteraci. ★
 - b) Opravit je ještě před commitem (další kolo tester → implementer →
   kontrola).
@@ -784,7 +784,7 @@ Odpověď: A
 
 ---
 
-## Kolo 12 – CI na PR #4 po commitu implementace (2026-11-16)
+## Kolo 12 – CI na PR #4 (původní repo) po commitu implementace (2026-11-16)
 
 CI selhalo ve všech 25 liniích (lokálně je vše zelené). Tři nezávislé
 příčiny, žádná nesouvisí s logikou EET:
@@ -851,7 +851,7 @@ Odpověď: A
 
 ## Kolo 14 – náhodné selhání type coverage (2026-11-16)
 
-Po mergi PR #4 selhala na `main` jedna linie (P8.4, Laravel 13,
+Po mergi PR #4 (původní repo) selhala na `main` jedna linie (P8.4, Laravel 13,
 prefer-lowest) v kroku Type Coverage: `pest-plugin-type-coverage` při
 paralelním zpracování (Pokio fork) poškodil vlastní cache
 `vendor/pestphp/pest-plugin-type-coverage/.temp/v3.php` (`ParseError`,
@@ -876,7 +876,7 @@ R73). Pro hostitele na PHP 8.3 je to **breaking change**. PHP 8.3 má
 bezpečnostní podporu do konce roku 2027, produkce EET 2.0 startuje
 1. 1. 2027 a část hostitelů na 8.3 ještě bude.
 - a) Ponechat PHP 8.3 a Pest 4 i 5; náhodné pády řeší úprava kroku
-  Type Coverage z PR #8 (CI tam prošlo ve všech 25 liniích). Zrušení PHP 8.3
+  Type Coverage z PR #8 (původní repo; CI tam prošlo ve všech 25 liniích). Zrušení PHP 8.3
   zvážit až po skončení jeho podpory. ★
 - b) Zrušit PHP 8.3: `php ^8.4`, Pest jen `^5.0` (+ pest-plugin-laravel
   a type-coverage `^5.0`), matice bez PHP 8.3, úprava z PR #8 se pak může
@@ -887,7 +887,7 @@ Odpověď: A
 
 ---
 
-## Kolo 15 – obnova pokladního certifikátu přes CA EET API (issue #2, 2026-11-16)
+## Kolo 15 – obnova pokladního certifikátu přes CA EET API (issue #2 v původním repu, 2026-11-16)
 
 Fakta: `spec/01-eet-2-0-fakta.md` kap. 5 a 6, `caeetapi_jwt.yml`. Navazuje
 na import a výběr certifikátu ve `spec/11-poplatnik-a-certifikat.md`
@@ -1250,7 +1250,7 @@ nevyvolá, nastane to jen po úpravě schématu hostitelem. Návrh: `QueryErrors
 u SQLSTATE třídy 23 nahradí výjimku ovladače očištěnou `PDOException`
 (jen SQLSTATE a první řádek zprávy).
 
-## Kolo 21 – odstranění stropu PHPStanu (issue #6, 2026-11-17)
+## Kolo 21 – odstranění stropu PHPStanu (issue #3, dříve #6 v původním repu, 2026-11-17)
 
 **Q76 – Strop `phpstan/phpstan <2.3.6` nejde odstranit pro linie s Pest 4.**
 Plugin `pestphp/pest-plugin-type-coverage` opravil nekompatibilitu
@@ -1261,7 +1261,7 @@ PHPStan 2.3.6) → type coverage padá; prefer-lowest (PHPStan 2.1.32) a Pest 5
 (plugin 5.1.1, PHPStan 2.3.6) projdou. Podmínku „PHPStan <2.3.6 jen
 s pluginem 4.x“ `composer.json` vyjádřit neumí. `composer.json` mění jen
 člověk, workflow devops.
-- a) Strop v `composer.json` ponechat a issue #6 nechat otevřené, dokud
+- a) Strop v `composer.json` ponechat a issue #3 nechat otevřené, dokud
   plugin nevydá opravu i v řadě 4.x (nebo dokud matice nepřestane
   podporovat Pest 4). Nic se nemění. ★
 - b) Strop z `composer.json` odstranit a v `tests.yml` u linií s Pest 4
@@ -1273,6 +1273,6 @@ s pluginem 4.x“ `composer.json` vyjádřit neumí. `composer.json` mění jen
 
 Odpověď: A (2026-11-17)
 
-Doplnění k Q64 (2026-11-17): PR #9 (obnova certifikátu) člověk mergnul bez
+Doplnění k Q64 (2026-11-17): PR #9 v původním repu (obnova certifikátu) člověk mergnul bez
 běhu CI matice (odchylka → b pro tento PR). PHP 8.3 a Windows zůstávají
 neověřené do příštího běhu CI.

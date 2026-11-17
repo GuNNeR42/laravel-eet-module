@@ -2,7 +2,7 @@
 
 > Stav: návrh · Verze: 0.1 · Navazuje na: `spec/01-eet-2-0-fakta.md`
 > kap. 5–6, `spec/11-poplatnik-a-certifikat.md`, `spec/10-interface.md`,
-> odpovědi Q52–Q75 v `spec/99-open-questions.md` (issue #2)
+> odpovědi Q52–Q75 v `spec/99-open-questions.md` (issue #2 v původním repu)
 
 ## Účel
 
