@@ -1,6 +1,10 @@
 # Release Notes
 
-## [Unreleased](https://github.com/gunner42/laravel-eet-module/compare/v0.1.0...1.x)
+## [Unreleased](https://github.com/gunner42/laravel-eet-module/compare/v1.0.0...main)
+
+## [v1.0.0](https://github.com/gunner42/laravel-eet-module/commits/v1.0.0) - 2026-11-17
+
+First release: the client side of EET 2.0 (interface v4) for Laravel 12 and 13: taxpayers, registration units, cash registers and cash register certificates, signed data messages sent to the EET service, verified confirmations (POK), automatic resubmission, reversals and a test double.
 
 ### Added
 
@@ -13,8 +17,3 @@
 
 - Importing a PKCS#12 file without a private key now reports `MissingPrivateKey` instead of `Unreadable`.
 - A failed database write of a certificate (import or renewal) throws a `QueryException` without query bindings, so the message no longer contains the certificate PEM or the encrypted private key.
-
-
-## [v0.1.0](https://github.com/gunner42/laravel-eet-module/compare/...v0.1.0) - 202x-xx-xx
-
-Initial pre-release.
