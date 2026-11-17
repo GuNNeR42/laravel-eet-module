@@ -35,42 +35,6 @@ php artisan vendor:publish --tag="laravel-eet-module-lang"
 
 `--tag="laravel-eet-module"` publishes all three. The package has no routes and no views.
 
-### Installing from the private GitHub repository
-
-The package is not published on Packagist; Composer installs it straight from the private GitHub repository. Every machine that runs `composer install` (developers, CI, deployment) needs read access to the repository.
-
-1. Add the repository to the host application's `composer.json`:
-
-    ```json
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/GuNNeR42/laravel-eet-module"
-        }
-    ]
-    ```
-
-    Or run `composer config repositories.laravel-eet-module vcs https://github.com/GuNNeR42/laravel-eet-module`.
-
-2. Give Composer a GitHub token with read access to the repository: a fine-grained personal access token limited to this repository with the *Contents: Read-only* permission, or a classic token with the `repo` scope.
-
-    ```bash
-    # once per machine, stored in ~/.composer/auth.json (outside the project)
-    composer config --global github-oauth.github.com <token>
-    ```
-
-    In CI and deployment pipelines pass the token through the `COMPOSER_AUTH` environment variable instead, for example `COMPOSER_AUTH='{"github-oauth":{"github.com":"<token>"}}'`, stored as a secret. Never commit an `auth.json` with the token.
-
-3. Require the package:
-
-    ```bash
-    composer require gunner42/laravel-eet-module:^1.0
-    ```
-
-    Composer resolves versions from the Git tags of the repository. To follow unreleased changes, require `dev-main` instead.
-
-Then publish and run the migrations as shown above.
-
 ## Configuration
 
 The configuration lives in `config/laravel-eet-module.php`. Every value outside the valid values throws `InvalidConfiguration` with the key before anything is stored or sent.
